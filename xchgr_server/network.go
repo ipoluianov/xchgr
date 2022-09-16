@@ -1,4 +1,4 @@
-package xchgr
+package xchgr_server
 
 import (
 	"encoding/base32"

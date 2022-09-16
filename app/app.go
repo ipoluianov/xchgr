@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/ipoluianov/gomisc/logger"
-	"github.com/ipoluianov/xchgr/xchgr"
+	"github.com/ipoluianov/xchgr/xchgr_server"
 	"github.com/kardianos/osext"
 	"github.com/kardianos/service"
 )
@@ -160,13 +160,13 @@ func (p *program) Stop(_ service.Service) error {
 }
 
 /////////////////////////////
-var server *xchgr.Server
+var server *xchgr_server.Server
 
 func Start() error {
 	logger.Println("[i]", "App::Start", "begin")
 	TuneFDs()
 
-	server = xchgr.NewServer()
+	server = xchgr_server.NewServer()
 	server.Start()
 
 	logger.Println("[i]", "App::Start", "end")
