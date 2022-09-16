@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,10 +29,12 @@ type Server struct {
 	// Data
 	nonces *Nonces
 	blocks map[string]*Block
+
+	network *Network
 }
 
 type Block struct {
-	data []byte
+	data [512]byte
 	dt   time.Time
 }
 
@@ -44,6 +47,7 @@ const (
 
 func NewServer() *Server {
 	var c Server
+	c.network = NewNetworkDefault()
 	return &c
 }
 
@@ -198,6 +202,8 @@ func (c *Server) processFrame(conn net.PacketConn, sourceAddress *net.UDPAddr, f
 		c.processFrame02(conn, sourceAddress, frame)
 	case 0x03:
 		c.processFrame03(conn, sourceAddress, frame)
+	case 0x04:
+		c.processFrame04(conn, sourceAddress, frame)
 	}
 }
 
@@ -247,7 +253,12 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	}
 	dataLen := len(frame) - 292 - publicKeyLen
 	publicKeyBS := frame[292 : 292+publicKeyLen]
-	data := frame[292+publicKeyLen:]
+	receivedData := frame[292+publicKeyLen:]
+
+	if (len(receivedData) % 32) != 0 {
+		c.sendError(conn, sourceAddress, frame, 0x08)
+		return
+	}
 
 	// Check Nonce
 	if !c.nonces.Check(nonce) {
@@ -288,12 +299,30 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	peerAddress := "#" + xchg.AddressForPublicKeyBS(publicKeyBS)
 	c.mtx.Lock()
 	existingBlock, existingBlockOk := c.blocks[peerAddress]
+
+	var data []byte
+
+	dataLenToAdd := 32 + len(receivedData)
+
 	if existingBlockOk {
-		existingBlock.data = data
+		data = existingBlock.data[:]
+		for i := dataLenToAdd; i < 512; i++ {
+			data[i-dataLenToAdd] = data[i]
+		}
 		existingBlock.dt = time.Now()
 	} else {
-		c.blocks[peerAddress] = &Block{data: data, dt: time.Now()}
+		existingBlock = &Block{dt: time.Now()}
+		c.blocks[peerAddress] = existingBlock
 	}
+
+	offsetOfNewData := 512 - dataLenToAdd
+
+	data[offsetOfNewData+0] = 0x01
+	data[offsetOfNewData+1] = 0x00
+	copy(data[offsetOfNewData+2:], sourceAddress.IP)
+	binary.LittleEndian.PutUint16(data[offsetOfNewData+18:], uint16(sourceAddress.Port))
+	copy(data[offsetOfNewData+32:], receivedData)
+
 	c.mtx.Unlock()
 
 	response := make([]byte, 8)
@@ -318,11 +347,42 @@ func (c *Server) processFrame03(conn net.PacketConn, sourceAddress *net.UDPAddr,
 		response := make([]byte, 8+len(addressBS)+1+len(dataBlock.data))
 		copy(response[8:], addressBS)
 		response[8+len(addressBS)] = '='
-		copy(response[8+len(addressBS)+1:], dataBlock.data)
+		copy(response[8+len(addressBS)+1:], dataBlock.data[:])
 		c.sendResponse(conn, sourceAddress, frame, response)
 	} else {
 		c.sendError(conn, sourceAddress, frame, 0x02)
 	}
+}
+
+func (c *Server) processFrame04(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+	addressBS := frame[8:]
+	address := string(addressBS)
+
+	hosts := c.network.GetNodesAddressesByAddress(address)
+	response := make([]byte, 8, 1024)
+
+	for _, addressAsString := range hosts {
+		parts := strings.Split(addressAsString, ":")
+		if len(parts) == 2 {
+			ip := net.ParseIP(parts[0])
+			if len(ip) != 16 {
+				continue
+			}
+			port, err := strconv.ParseInt(parts[1], 10, 32)
+			if err != nil {
+				continue
+			}
+
+			addressItem := make([]byte, 32)
+			addressItem[0] = 0x02
+			addressItem[1] = 0x00
+			copy(addressItem[2:], ip)
+			binary.LittleEndian.PutUint16(addressItem[18:], uint16(port))
+			response = append(response, addressItem...)
+		}
+	}
+
+	c.sendResponse(conn, sourceAddress, frame, response)
 }
 
 func (c *Server) resolveAddress(address string) (nativeAddress string, err error) {
