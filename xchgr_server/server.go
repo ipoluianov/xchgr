@@ -187,7 +187,7 @@ func (c *Server) backgroundOperations() {
 }
 
 func (c *Server) processFrame(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	fmt.Println("processFrame", sourceAddress, frame)
+	fmt.Println("processFrame", sourceAddress, frame[0])
 	if len(frame) < 8 {
 		return
 	}
@@ -313,6 +313,7 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	} else {
 		existingBlock = &Block{dt: time.Now()}
 		c.blocks[peerAddress] = existingBlock
+		data = existingBlock.data[:]
 	}
 
 	offsetOfNewData := 512 - dataLenToAdd
