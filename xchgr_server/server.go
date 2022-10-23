@@ -5,10 +5,12 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,7 +32,8 @@ type Server struct {
 	nonces *Nonces
 	blocks map[string]*Block
 
-	network *Network
+	network    *Network
+	httpServer *HttpServer
 }
 
 type Block struct {
@@ -48,6 +51,7 @@ const (
 func NewServer() *Server {
 	var c Server
 	c.network = NewNetworkDefault()
+	c.httpServer = NewHttpServer()
 	return &c
 }
 
@@ -66,6 +70,8 @@ func (c *Server) Start() error {
 	// Initialization
 	c.blocks = make(map[string]*Block)
 	c.nonces = NewNonces(NONCE_COUNT)
+
+	c.httpServer.Start(c)
 
 	// Start worker
 	go c.thReceive()
@@ -95,6 +101,8 @@ func (c *Server) Stop() error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+
+	c.httpServer.Stop()
 
 	c.mtx.Lock()
 	c.blocks = nil
@@ -204,6 +212,16 @@ func (c *Server) processFrame(conn net.PacketConn, sourceAddress *net.UDPAddr, f
 		c.processFrame03(conn, sourceAddress, frame)
 	case 0x04:
 		c.processFrame04(conn, sourceAddress, frame)
+	case 0x05:
+		c.processFrame05(conn, sourceAddress, frame)
+	case 0x06:
+		c.processFrame06(conn, sourceAddress, frame)
+	case 0x07:
+		c.processFrame07(conn, sourceAddress, frame)
+	case 0x08:
+		c.processFrame08(conn, sourceAddress, frame)
+	case 0x09:
+		c.processFrame09(conn, sourceAddress, frame)
 	}
 }
 
@@ -220,18 +238,35 @@ func (c *Server) sendResponse(conn net.PacketConn, sourceAddress *net.UDPAddr, o
 	_, _ = conn.WriteTo(responseFrame, sourceAddress)
 }
 
+// Ping request
 func (c *Server) processFrame00(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+	if len(frame) > 1 {
+		frame[0] = 0x01
+	}
 	c.sendResponse(conn, sourceAddress, frame, make([]byte, 8))
 }
 
+// Ping response
 func (c *Server) processFrame01(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+	// Nothing to do
+}
+
+// GetNonce request
+func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
 	response := make([]byte, 8+16)
 	nonce := c.nonces.Next()
 	copy(response[8:], nonce[:])
+	frame[0] = 0x03
 	c.sendResponse(conn, sourceAddress, frame, response)
 }
 
-func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+// GetNonce response
+func (c *Server) processFrame03(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+	// Nothing to do
+}
+
+// PutData request
+func (c *Server) processFrame04(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
 	/*
 		8: nonce. 16 bytes
 		24: salt. 8 bytes
@@ -244,6 +279,8 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 		c.sendError(conn, sourceAddress, frame, 0x01)
 		return
 	}
+
+	frame[0] = 0x05
 	nonce := frame[8:24]
 	signature := frame[32:288]
 	publicKeyLen := int(binary.LittleEndian.Uint32(frame[288:]))
@@ -255,7 +292,7 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	publicKeyBS := frame[292 : 292+publicKeyLen]
 	receivedData := frame[292+publicKeyLen:]
 
-	if (len(receivedData) % 32) != 0 {
+	if (len(receivedData)%32) != 0 || len(receivedData) > 256 {
 		c.sendError(conn, sourceAddress, frame, 0x08)
 		return
 	}
@@ -286,8 +323,6 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 		return
 	}
 
-	fmt.Println("Signature:", signature)
-
 	hashForSign := sha256.Sum256(frame[8:32])
 
 	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashForSign[:], signature)
@@ -307,7 +342,10 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	if existingBlockOk {
 		data = existingBlock.data[:]
 		for i := dataLenToAdd; i < 512; i++ {
-			data[i-dataLenToAdd] = data[i]
+			offsetInData := i - dataLenToAdd
+			if offsetInData >= 0 && offsetInData < 512 {
+				data[offsetInData] = data[i]
+			}
 		}
 		existingBlock.dt = time.Now()
 	} else {
@@ -318,11 +356,13 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 
 	offsetOfNewData := 512 - dataLenToAdd
 
-	data[offsetOfNewData+0] = 0x01
-	data[offsetOfNewData+1] = 0x00
-	copy(data[offsetOfNewData+2:], sourceAddress.IP)
-	binary.LittleEndian.PutUint16(data[offsetOfNewData+18:], uint16(sourceAddress.Port))
-	copy(data[offsetOfNewData+32:], receivedData)
+	if offsetOfNewData >= 0 && offsetOfNewData <= 512-32 {
+		data[offsetOfNewData+0] = 0x01
+		data[offsetOfNewData+1] = 0x00
+		copy(data[offsetOfNewData+2:], sourceAddress.IP)
+		binary.LittleEndian.PutUint16(data[offsetOfNewData+18:], uint16(sourceAddress.Port))
+		copy(data[offsetOfNewData+32:], receivedData)
+	}
 
 	c.mtx.Unlock()
 
@@ -330,7 +370,13 @@ func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	c.sendResponse(conn, sourceAddress, frame, response)
 }
 
-func (c *Server) processFrame03(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+// PutData response
+func (c *Server) processFrame05(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+	// Nothing to do
+}
+
+// GetData request
+func (c *Server) processFrame06(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
 	addressBS := frame[8:]
 	address := string(addressBS)
 	nativeAddress, err := c.resolveAddress(address)
@@ -347,6 +393,7 @@ func (c *Server) processFrame03(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	if ok && dataBlock != nil {
 		response := make([]byte, 8+len(addressBS)+1+len(dataBlock.data))
 		copy(response[8:], addressBS)
+		frame[0] = 0x07
 		response[8+len(addressBS)] = '='
 		copy(response[8+len(addressBS)+1:], dataBlock.data[:])
 		c.sendResponse(conn, sourceAddress, frame, response)
@@ -355,7 +402,13 @@ func (c *Server) processFrame03(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	}
 }
 
-func (c *Server) processFrame04(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+// GetData response
+func (c *Server) processFrame07(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+	// Nothing to do
+}
+
+// GetNetwork request
+func (c *Server) processFrame08(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
 	addressBS := frame[8:]
 	address := string(addressBS)
 
@@ -386,6 +439,11 @@ func (c *Server) processFrame04(conn net.PacketConn, sourceAddress *net.UDPAddr,
 	c.sendResponse(conn, sourceAddress, frame, response)
 }
 
+// GetNetwork response
+func (c *Server) processFrame09(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
+	// Nothing to do
+}
+
 func (c *Server) resolveAddress(address string) (nativeAddress string, err error) {
 	if len(address) < 1 {
 		err = errors.New("empty address")
@@ -405,6 +463,48 @@ func (c *Server) resolveAddress(address string) (nativeAddress string, err error
 	}
 
 	err = errors.New("unknown address")
+	return
+}
+
+func (c *Server) httpDebug() (result []byte, err error) {
+	type HttpDebugItem struct {
+		Address string
+		Data    []string
+	}
+
+	type HttpDebugStruct struct {
+		Items []*HttpDebugItem
+	}
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	var res HttpDebugStruct
+	res.Items = make([]*HttpDebugItem, 0)
+
+	for key, value := range c.blocks {
+		dataStrings := make([]string, 0)
+		for i := 0; i < 512; i += 32 {
+			//if value.data[i] != 0 {
+			port := binary.LittleEndian.Uint16(value.data[i+18:])
+			strLine := fmt.Sprint(value.data[i]) + ":" + fmt.Sprint(value.data[i+1]) + ":" + fmt.Sprint(value.data[i+2:i+2+16]) + ":" + fmt.Sprint(port)
+			dataStrings = append(dataStrings, strLine)
+			//}
+		}
+
+		res.Items = append(res.Items, &HttpDebugItem{Address: key, Data: dataStrings})
+	}
+
+	sort.Slice(res.Items, func(i, j int) bool {
+		return res.Items[i].Address < res.Items[j].Address
+	})
+
+	bs, err := json.MarshalIndent(res, "", " ")
+	if err != nil {
+		return
+	}
+
+	result = bs
 	return
 }
 

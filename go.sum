@@ -1,3 +1,5 @@
+github.com/gorilla/mux v1.8.0 h1:i40aqfkR1h2SlN9hojwV5ZA91wcXFOvkdNIeFDP5koI=
+github.com/gorilla/mux v1.8.0/go.mod h1:DVbg23sWSpFRCP0SfiEN6jmj59UnW/n46BH5rLB71So=
 github.com/ipoluianov/gomisc v0.0.20 h1:TBD+YsSnDtGKXWk9ZjNOjLcAxXWrr54THwQPtWIN+PE=
 github.com/ipoluianov/gomisc v0.0.20/go.mod h1:3rlYbwz/L3LSguP2M+Png08EAWoXFxPXJ65uLhweiiU=
 github.com/ipoluianov/xchg v0.0.38 h1:1AhhwioEg6lfzv+OQ5M4P3mg8ckd+7fxhifm90ARtpA=
