@@ -3,9 +3,9 @@ package main
 import "github.com/ipoluianov/xchgr/app"
 
 func main() {
-	app.ServiceName = "xchg"
-	app.ServiceDisplayName = "Traffic exchange service"
-	app.ServiceDescription = "Traffic exchange service"
+	app.ServiceName = "xchgr"
+	app.ServiceDisplayName = "Xchg router"
+	app.ServiceDescription = "Xchg router"
 	app.ServiceRunFunc = app.RunAsServiceF
 	app.ServiceStopFunc = app.StopServiceF
 
