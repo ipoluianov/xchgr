@@ -16,7 +16,7 @@ func NewAddressStorage() *AddressStorage {
 	return &c
 }
 
-func (c *AddressStorage) Put(sourceIP net.IP, port int, frame []byte) {
+func (c *AddressStorage) Put(sourceIP net.IP, port uint16, frame []byte) {
 	c.mtx.Lock()
 	id := c.nextId
 	c.messages[id] = NewMessage(id, sourceIP, port, frame)

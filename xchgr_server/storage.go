@@ -19,7 +19,7 @@ func NewStorage() *Storage {
 	return &c
 }
 
-func (c *Storage) Put(addressDest string, sourceIP net.IP, port int, frame []byte) {
+func (c *Storage) Put(addressDest string, sourceIP net.IP, port uint16, frame []byte) {
 	var ok bool
 	var addressStorage *AddressStorage
 

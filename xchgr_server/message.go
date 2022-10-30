@@ -10,10 +10,10 @@ type Message struct {
 type MessageHeader struct {
 	id       int64
 	sourceIP net.IP
-	port     int
+	port     uint16
 }
 
-func NewMessage(id int64, sourceIP net.IP, port int, data []byte) *Message {
+func NewMessage(id int64, sourceIP net.IP, port uint16, data []byte) *Message {
 	var c Message
 	c.header.id = id
 	c.header.sourceIP = sourceIP
