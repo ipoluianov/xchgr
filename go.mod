@@ -6,7 +6,7 @@ require (
 	github.com/ipoluianov/gomisc v0.0.20
 	github.com/ipoluianov/xchg v0.0.38
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
-	github.com/kardianos/service v1.2.1
+	github.com/kardianos/service v1.2.2
 )
 
 require (
