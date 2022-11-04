@@ -1,44 +1,50 @@
 package xchgr_server
 
 import (
-	"net"
 	"sync"
 )
 
 type AddressStorage struct {
-	mtx      sync.Mutex
-	nextId   int64
-	messages map[int64]*Message
+	mtx         sync.Mutex
+	maxMessages int
+	messages    []*Message
 }
 
 func NewAddressStorage() *AddressStorage {
 	var c AddressStorage
+	c.maxMessages = 10000
+	c.messages = make([]*Message, 0, c.maxMessages+1)
 	return &c
 }
 
-func (c *AddressStorage) Put(sourceIP net.IP, port uint16, frame []byte) {
+func (c *AddressStorage) Put(id uint64, frame []byte) {
 	c.mtx.Lock()
-	id := c.nextId
-	c.messages[id] = NewMessage(id, sourceIP, port, frame)
-	c.nextId++
-	c.mtx.Unlock()
-}
-
-func (c *AddressStorage) GetMessages(ids []int64) (messages []*Message) {
-	c.mtx.Lock()
-	messages = make([]*Message, 0)
-	for i, m := range c.messages {
-		messages[i] = m
+	msg := NewMessage(id, frame)
+	c.messages = append(c.messages, msg)
+	if len(c.messages) > c.maxMessages {
+		c.messages = c.messages[1:]
+		//fmt.Println("remove message-----------")
 	}
 	c.mtx.Unlock()
-	return
 }
 
-func (c *AddressStorage) GetHeaders() (result []*MessageHeader) {
+func (c *AddressStorage) GetMessage(afterId uint64, maxSize uint64) (data []byte, lastId uint64) {
+	data = make([]byte, 0)
+	lastId = afterId
 	c.mtx.Lock()
-	result = make([]*MessageHeader, len(c.messages))
-	for i, m := range c.messages {
-		result[i] = &m.header
+	for _, m := range c.messages {
+		if m.id > afterId {
+			if len(data)+len(m.data) < int(maxSize) {
+				data = append(data, m.data...)
+				lastId = m.id
+			}
+		}
+	}
+
+	if len(data) == 0 && len(c.messages) > 0 {
+		if afterId > c.messages[len(c.messages)-1].id {
+			lastId = c.messages[0].id
+		}
 	}
 	c.mtx.Unlock()
 	return

@@ -159,15 +159,15 @@ func (p *program) Stop(_ service.Service) error {
 	return nil
 }
 
-/////////////////////////////
-var server *xchgr_server.Server
+// ///////////////////////////
+var system *xchgr_server.System
 
 func Start() error {
 	logger.Println("[i]", "App::Start", "begin")
 	TuneFDs()
 
-	server = xchgr_server.NewServer()
-	server.Start()
+	system = xchgr_server.NewSystem()
+	system.Start()
 
 	logger.Println("[i]", "App::Start", "end")
 
@@ -175,7 +175,7 @@ func Start() error {
 }
 
 func Stop() {
-	server.Stop()
+	system.Stop()
 }
 
 func RunConsole() {

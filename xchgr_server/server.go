@@ -1,26 +1,17 @@
 package xchgr_server
 
 import (
-	"crypto"
 	"crypto/rsa"
-	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base32"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"net"
-	"os"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/ipoluianov/gomisc/crypt_tools"
-	"github.com/ipoluianov/xchg/xchg"
 )
 
-type Server struct {
+type Router struct {
 	// Sync
 	mtx sync.Mutex
 
@@ -30,32 +21,28 @@ type Server struct {
 
 	// Data
 	nonces *Nonces
-	blocks map[string]*Block
 
-	network    *Network
-	httpServer *HttpServer
-}
+	network *Network
+	nextId  uint64
 
-type Block struct {
-	data [512]byte
-	dt   time.Time
+	addresses map[string]*AddressStorage
 }
 
 const (
-	UDP_PORT          = 8484
 	NONCE_COUNT       = 1024 * 1024
 	INPUT_BUFFER_SIZE = 1024 * 1024
 	STORING_TIMEOUT   = 60 * time.Second
 )
 
-func NewServer() *Server {
-	var c Server
+func NewRouter() *Router {
+	var c Router
 	c.network = NewNetworkDefault()
-	c.httpServer = NewHttpServer()
+	c.nonces = NewNonces(100000)
+	c.addresses = make(map[string]*AddressStorage)
 	return &c
 }
 
-func (c *Server) Start() error {
+func (c *Router) Start() error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -67,19 +54,10 @@ func (c *Server) Start() error {
 		return errors.New("it is stopping")
 	}
 
-	// Initialization
-	c.blocks = make(map[string]*Block)
-	c.nonces = NewNonces(NONCE_COUNT)
-
-	c.httpServer.Start(c)
-
-	// Start worker
-	go c.thReceive()
-
 	return nil
 }
 
-func (c *Server) Stop() error {
+func (c *Router) Stop() error {
 	c.mtx.Lock()
 	if !c.started {
 		c.mtx.Unlock()
@@ -102,349 +80,201 @@ func (c *Server) Stop() error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	c.httpServer.Stop()
-
 	c.mtx.Lock()
-	c.blocks = nil
 	c.nonces = nil
 	c.mtx.Unlock()
 
 	return nil
 }
 
-func (c *Server) thReceive() {
-	var err error
-	var conn net.PacketConn
+func (c *Router) backgroundOperations() {
+	c.mtx.Lock()
+	c.mtx.Unlock()
+}
 
-	fmt.Println("started")
+func (c *Router) Put(frame []byte) {
+	var ok bool
+	var addressStorage *AddressStorage
 
-	c.started = true
-	buffer := make([]byte, INPUT_BUFFER_SIZE)
+	addressDestBS := frame[70:100]
+	addressDest := "#" + base32.StdEncoding.EncodeToString(addressDestBS)
+	//fmt.Println("FRAME to ", addressDest, frame[8])
 
-	conn, err = net.ListenPacket("udp", ":"+fmt.Sprint(UDP_PORT))
-	if err != nil {
-		c.mtx.Lock()
-		c.started = false
-		c.stopping = false
-		c.mtx.Unlock()
-		fmt.Println("net.ListenPacket error:", err)
-		return
+	c.mtx.Lock()
+	addressStorage, ok = c.addresses[addressDest]
+	if !ok || addressStorage == nil {
+		addressStorage = NewAddressStorage()
+		c.addresses[addressDest] = addressStorage
 	}
+	id := c.nextId
+	c.nextId++
+	c.mtx.Unlock()
 
-	var n int
-	var addr net.Addr
+	addressStorage.Put(id, frame)
+}
 
-	for {
-		c.mtx.Lock()
-		stopping := c.stopping
-		c.mtx.Unlock()
-		if stopping {
+func (c *Router) processFrames(frames []byte) (response []byte, err error) {
+	offset := 0
+
+	for offset < len(frames) {
+		if offset+128 <= len(frames) {
+			frameLen := int(binary.LittleEndian.Uint32(frames[offset:]))
+			if offset+frameLen <= len(frames) {
+				response, err = c.processFrame(frames[offset : offset+frameLen])
+				if err != nil {
+					return
+				}
+			} else {
+				break
+			}
+			offset += frameLen
+		} else {
 			break
 		}
-
-		err = conn.SetReadDeadline(time.Now().Add(1000 * time.Millisecond))
-		if err != nil {
-			c.mtx.Lock()
-			c.started = false
-			c.stopping = false
-			c.mtx.Unlock()
-			fmt.Println("conn.SetReadDeadline error:", err)
-			return
-		}
-
-		n, addr, err = conn.ReadFrom(buffer)
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			c.backgroundOperations()
-			continue
-		}
-
-		if err != nil {
-			c.mtx.Lock()
-			c.started = false
-			c.stopping = false
-			c.mtx.Unlock()
-			fmt.Println("conn.ReadFrom error:", err)
-			return
-		}
-		udpAddr, ok := addr.(*net.UDPAddr)
-		if ok {
-			frame := make([]byte, n)
-			copy(frame, buffer[:n])
-			go c.processFrame(conn, udpAddr, frame)
-		} else {
-			fmt.Println("unknown address type")
-		}
 	}
-
-	fmt.Println("stoppped")
-	c.mtx.Lock()
-	c.started = false
-	c.stopping = false
-	c.mtx.Unlock()
+	return
 }
 
-func (c *Server) backgroundOperations() {
-	c.mtx.Lock()
-	now := time.Now()
-	for key, value := range c.blocks {
-		if value.dt.Sub(now) > STORING_TIMEOUT {
-			delete(c.blocks, key)
-		}
-	}
-	c.mtx.Unlock()
-}
-
-func (c *Server) processFrame(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	fmt.Println("processFrame", sourceAddress, frame[0])
-	if len(frame) < 8 {
+func (c *Router) processFrame(frame []byte) (response []byte, err error) {
+	if len(frame) < 128 {
 		return
 	}
+	//fmt.Println("processFrame", frame[8])
 
-	frameType := frame[0]
-	switch frameType {
-	case 0x00:
-		c.processFrame00(conn, sourceAddress, frame)
-	case 0x01:
-		c.processFrame01(conn, sourceAddress, frame)
-	case 0x02:
-		c.processFrame02(conn, sourceAddress, frame)
-	case 0x03:
-		c.processFrame03(conn, sourceAddress, frame)
-	case 0x04:
-		c.processFrame04(conn, sourceAddress, frame)
-	case 0x05:
-		c.processFrame05(conn, sourceAddress, frame)
-	case 0x06:
-		c.processFrame06(conn, sourceAddress, frame)
-	case 0x07:
-		c.processFrame07(conn, sourceAddress, frame)
-	case 0x08:
-		c.processFrame08(conn, sourceAddress, frame)
-	case 0x09:
-		c.processFrame09(conn, sourceAddress, frame)
+	frameType := frame[8]
+
+	if frameType < 0x10 {
+		switch frameType {
+		case 0x00:
+			response, err = c.processFrame00(frame)
+		case 0x01:
+			response, err = c.processFrame01(frame)
+		case 0x02:
+			response, err = c.processFrame02(frame)
+		case 0x03:
+			response, err = c.processFrame03(frame)
+		case 0x04:
+			response, err = c.processFrame04(frame)
+		case 0x05:
+			response, err = c.processFrame05(frame)
+		case 0x06:
+			response, err = c.processFrame06(frame)
+		case 0x07:
+			response, err = c.processFrame07(frame)
+		case 0x08:
+			response, err = c.processFrame08(frame)
+		case 0x09:
+			response, err = c.processFrame09(frame)
+		}
+	} else {
+
+		c.Put(frame)
 	}
-}
 
-func (c *Server) sendError(conn net.PacketConn, sourceAddress *net.UDPAddr, originalFrame []byte, errorCode byte) {
-	var responseFrame [8]byte
-	copy(responseFrame[:], originalFrame[:8])
-	responseFrame[1] = errorCode
-	_, _ = conn.WriteTo(responseFrame[:], sourceAddress)
-}
-
-func (c *Server) sendResponse(conn net.PacketConn, sourceAddress *net.UDPAddr, originalFrame []byte, responseFrame []byte) {
-	copy(responseFrame, originalFrame[:8])
-	responseFrame[1] = 0x00
-	_, _ = conn.WriteTo(responseFrame, sourceAddress)
+	return
 }
 
 // Ping request
-func (c *Server) processFrame00(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	if len(frame) > 1 {
-		frame[0] = 0x01
-	}
-	c.sendResponse(conn, sourceAddress, frame, make([]byte, 8))
+func (c *Router) processFrame00(frame []byte) (response []byte, err error) {
+	response = make([]byte, len(frame))
+	copy(response, frame)
+	response[8] = 0x01
+	return
 }
 
 // Ping response
-func (c *Server) processFrame01(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	// Nothing to do
+func (c *Router) processFrame01(frame []byte) (response []byte, err error) {
+	return
 }
 
 // GetNonce request
-func (c *Server) processFrame02(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	response := make([]byte, 8+16)
+func (c *Router) processFrame02(frame []byte) (response []byte, err error) {
+	response = make([]byte, 128+16)
 	nonce := c.nonces.Next()
-	copy(response[8:], nonce[:])
-	frame[0] = 0x03
-	c.sendResponse(conn, sourceAddress, frame, response)
+	copy(response[128:], nonce[:])
+	return
 }
 
 // GetNonce response
-func (c *Server) processFrame03(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	// Nothing to do
+func (c *Router) processFrame03(frame []byte) (response []byte, err error) {
+	return
 }
 
-// PutData request
-func (c *Server) processFrame04(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	/*
-		8: nonce. 16 bytes
-		24: salt. 8 bytes
-		32: rsa-2048 signature. 256 bytes
-		288: public key len. 4 bytes (PKL)
-		292: public key
-		292+PKL: data
-	*/
-	if len(frame) < 292 {
-		c.sendError(conn, sourceAddress, frame, 0x01)
-		return
-	}
-
-	frame[0] = 0x05
-	nonce := frame[8:24]
-	signature := frame[32:288]
-	publicKeyLen := int(binary.LittleEndian.Uint32(frame[288:]))
-	if len(frame) < 292+publicKeyLen {
-		c.sendError(conn, sourceAddress, frame, 0x02)
-		return
-	}
-	dataLen := len(frame) - 292 - publicKeyLen
-	publicKeyBS := frame[292 : 292+publicKeyLen]
-	receivedData := frame[292+publicKeyLen:]
-
-	if (len(receivedData)%32) != 0 || len(receivedData) > 256 {
-		c.sendError(conn, sourceAddress, frame, 0x08)
-		return
-	}
-
-	// Check Nonce
-	if !c.nonces.Check(nonce) {
-		c.sendError(conn, sourceAddress, frame, 0x03)
-		return
-	}
-
-	// Check hash
-	hash := sha256.Sum256(frame[8:32]) // Nonce + Salt
-	if !CheckHash(hash[:], frame[5]) {
-		c.sendError(conn, sourceAddress, frame, 0x04)
-		return
-	}
-
-	if dataLen > 256 {
-		c.sendError(conn, sourceAddress, frame, 0x05)
-		return
-	}
-
-	var publicKey *rsa.PublicKey
-	var err error
-	publicKey, err = crypt_tools.RSAPublicKeyFromDer(publicKeyBS)
-	if err != nil {
-		c.sendError(conn, sourceAddress, frame, 0x06)
-		return
-	}
-
-	hashForSign := sha256.Sum256(frame[8:32])
-
-	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashForSign[:], signature)
-	if err != nil {
-		c.sendError(conn, sourceAddress, frame, 0x07)
-		return
-	}
-
-	peerAddress := "#" + xchg.AddressForPublicKeyBS(publicKeyBS)
-	c.mtx.Lock()
-	existingBlock, existingBlockOk := c.blocks[peerAddress]
-
-	var data []byte
-
-	dataLenToAdd := 32 + len(receivedData)
-
-	if existingBlockOk {
-		data = existingBlock.data[:]
-		for i := dataLenToAdd; i < 512; i++ {
-			offsetInData := i - dataLenToAdd
-			if offsetInData >= 0 && offsetInData < 512 {
-				data[offsetInData] = data[i]
-			}
-		}
-		existingBlock.dt = time.Now()
-	} else {
-		existingBlock = &Block{dt: time.Now()}
-		c.blocks[peerAddress] = existingBlock
-		data = existingBlock.data[:]
-	}
-
-	offsetOfNewData := 512 - dataLenToAdd
-
-	if offsetOfNewData >= 0 && offsetOfNewData <= 512-32 {
-		data[offsetOfNewData+0] = 0x01
-		data[offsetOfNewData+1] = 0x00
-		copy(data[offsetOfNewData+2:], sourceAddress.IP)
-		binary.LittleEndian.PutUint16(data[offsetOfNewData+18:], uint16(sourceAddress.Port))
-		copy(data[offsetOfNewData+32:], receivedData)
-	}
-
-	c.mtx.Unlock()
-
-	response := make([]byte, 8)
-	c.sendResponse(conn, sourceAddress, frame, response)
+// Get messages headers request
+func (c *Router) processFrame04(frame []byte) (response []byte, err error) {
+	return
 }
 
-// PutData response
-func (c *Server) processFrame05(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	// Nothing to do
+// Get messages headers response
+func (c *Router) processFrame05(frame []byte) (response []byte, err error) {
+	return
 }
 
-// GetData request
-func (c *Server) processFrame06(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	addressBS := frame[8:]
-	address := string(addressBS)
-	nativeAddress, err := c.resolveAddress(address)
-	if err != nil {
-		fmt.Println(err)
-		c.sendError(conn, sourceAddress, frame, 0x01)
+// Get message request
+func (c *Router) processFrame06(frame []byte) (response []byte, err error) {
+	var ok bool
+	var addressStorage *AddressStorage
+
+	if len(frame) < 128+8 {
+		err = errors.New("wrong frame size")
 		return
 	}
+
+	afterId := binary.LittleEndian.Uint64(frame[128+0:])
+	maxSize := binary.LittleEndian.Uint64(frame[128+8:])
+
+	addressSrcBS := frame[40:70]
+	addressSrc := "#" + base32.StdEncoding.EncodeToString(addressSrcBS)
 
 	c.mtx.Lock()
-	dataBlock, ok := c.blocks[nativeAddress]
+	addressStorage, ok = c.addresses[addressSrc]
 	c.mtx.Unlock()
 
-	if ok && dataBlock != nil {
-		response := make([]byte, 8+len(addressBS)+1+len(dataBlock.data))
-		copy(response[8:], addressBS)
-		frame[0] = 0x07
-		response[8+len(addressBS)] = '='
-		copy(response[8+len(addressBS)+1:], dataBlock.data[:])
-		c.sendResponse(conn, sourceAddress, frame, response)
-	} else {
-		c.sendError(conn, sourceAddress, frame, 0x02)
-	}
-}
-
-// GetData response
-func (c *Server) processFrame07(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	// Nothing to do
-}
-
-// GetNetwork request
-func (c *Server) processFrame08(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	addressBS := frame[8:]
-	address := string(addressBS)
-
-	hosts := c.network.GetNodesAddressesByAddress(address)
-	response := make([]byte, 8, 1024)
-
-	for _, addressAsString := range hosts {
-		parts := strings.Split(addressAsString, ":")
-		if len(parts) == 2 {
-			ip := net.ParseIP(parts[0])
-			if len(ip) != 16 {
-				continue
-			}
-			port, err := strconv.ParseInt(parts[1], 10, 32)
-			if err != nil {
-				continue
-			}
-
-			addressItem := make([]byte, 32)
-			addressItem[0] = 0x02
-			addressItem[1] = 0x00
-			copy(addressItem[2:], ip)
-			binary.LittleEndian.PutUint16(addressItem[18:], uint16(port))
-			response = append(response, addressItem...)
-		}
+	if !ok || addressStorage == nil {
+		return
 	}
 
-	c.sendResponse(conn, sourceAddress, frame, response)
+	msgData, lastId := addressStorage.GetMessage(afterId, maxSize)
+	response = make([]byte, 8+len(msgData))
+	binary.LittleEndian.PutUint64(response[0:], lastId)
+	if msgData != nil {
+		copy(response[8:], msgData)
+	}
+
+	return
 }
 
-// GetNetwork response
-func (c *Server) processFrame09(conn net.PacketConn, sourceAddress *net.UDPAddr, frame []byte) {
-	// Nothing to do
+func RSAPublicKeyFromDer(publicKeyDer []byte) (publicKey *rsa.PublicKey, err error) {
+	publicKey, err = x509.ParsePKCS1PublicKey(publicKeyDer)
+	return
 }
 
-func (c *Server) resolveAddress(address string) (nativeAddress string, err error) {
+// Get message response
+func (c *Router) processFrame07(frame []byte) (response []byte, err error) {
+	return
+}
+
+// Resolve name request
+func (c *Router) processFrame08(frame []byte) (response []byte, err error) {
+	return
+}
+
+// Resolve name response
+func (c *Router) processFrame09(frame []byte) (response []byte, err error) {
+	return
+}
+
+// Put call
+func (c *Router) processFrame10(frame []byte) (response []byte, err error) {
+	return
+}
+
+// Put answer
+func (c *Router) processFrame11(frame []byte) (response []byte, err error) {
+	return
+}
+
+func (c *Router) resolveAddress(address string) (nativeAddress string, err error) {
 	if len(address) < 1 {
 		err = errors.New("empty address")
 		return
@@ -463,48 +293,6 @@ func (c *Server) resolveAddress(address string) (nativeAddress string, err error
 	}
 
 	err = errors.New("unknown address")
-	return
-}
-
-func (c *Server) httpDebug() (result []byte, err error) {
-	type HttpDebugItem struct {
-		Address string
-		Data    []string
-	}
-
-	type HttpDebugStruct struct {
-		Items []*HttpDebugItem
-	}
-
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	var res HttpDebugStruct
-	res.Items = make([]*HttpDebugItem, 0)
-
-	for key, value := range c.blocks {
-		dataStrings := make([]string, 0)
-		for i := 0; i < 512; i += 32 {
-			//if value.data[i] != 0 {
-			port := binary.LittleEndian.Uint16(value.data[i+18:])
-			strLine := fmt.Sprint(value.data[i]) + ":" + fmt.Sprint(value.data[i+1]) + ":" + fmt.Sprint(value.data[i+2:i+2+16]) + ":" + fmt.Sprint(port)
-			dataStrings = append(dataStrings, strLine)
-			//}
-		}
-
-		res.Items = append(res.Items, &HttpDebugItem{Address: key, Data: dataStrings})
-	}
-
-	sort.Slice(res.Items, func(i, j int) bool {
-		return res.Items[i].Address < res.Items[j].Address
-	})
-
-	bs, err := json.MarshalIndent(res, "", " ")
-	if err != nil {
-		return
-	}
-
-	result = bs
 	return
 }
 

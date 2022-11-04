@@ -2,6 +2,7 @@ package xchgr_server
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 type HttpServer struct {
 	srv      *http.Server
 	r        *mux.Router
-	server   *Server
+	server   *Router
 	stopping bool
 }
 
@@ -31,7 +32,7 @@ func NewHttpServer() *HttpServer {
 	return &c
 }
 
-func (c *HttpServer) Start(server *Server) {
+func (c *HttpServer) Start(server *Router) {
 	c.server = server
 
 	c.r = mux.NewRouter()
@@ -77,7 +78,11 @@ func (c *HttpServer) processApiRequest(w http.ResponseWriter, r *http.Request) {
 		function = r.FormValue("fn")
 	}
 
+	//fmt.Println("processApiRequest", function)
+
 	switch function {
+	case "d":
+		responseText, err = c.processD(w, r)
 	case "debug":
 		responseText, err = c.processDebug(w, r)
 	}
@@ -93,7 +98,23 @@ func (c *HttpServer) processApiRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) (result []byte, err error) {
-	result, err = c.server.httpDebug()
+	return
+}
+
+func (c *HttpServer) processD(w http.ResponseWriter, r *http.Request) (result []byte, err error) {
+	data64 := r.FormValue("d")
+	var dataBS []byte
+	dataBS, err = base64.StdEncoding.DecodeString(data64)
+	if err != nil {
+		return
+	}
+	var resultBS []byte
+	resultBS, err = c.server.processFrames(dataBS)
+	if err != nil {
+		return
+	}
+	resultStr := base64.StdEncoding.EncodeToString(resultBS)
+	result = []byte(resultStr)
 	return
 }
 
