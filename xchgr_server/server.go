@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ipoluianov/gomisc/logger"
 )
 
 type Router struct {
@@ -45,9 +47,23 @@ type RouterStatistics struct {
 	FramesOut int `json:"frames_out"`
 	BytesIn   int `json:"bytes_in"`
 	BytesOut  int `json:"bytes_out"`
+
+	HttpRequests  int `json:"http_requests"`
+	HttpRequestsR int `json:"http_requests_r"`
+	HttpRequestsW int `json:"http_requests_w"`
+	HttpRequestsN int `json:"http_requests_n"`
+	HttpRequestsD int `json:"http_requests_d"`
+	HttpRequestsF int `json:"http_requests_f"`
 }
 
 type RouterSpeedStatistics struct {
+	SpeedHttpRequests  int `json:"http_requests"`
+	SpeedHttpRequestsR int `json:"http_requests_r"`
+	SpeedHttpRequestsW int `json:"http_requests_w"`
+	SpeedHttpRequestsN int `json:"http_requests_n"`
+	SpeedHttpRequestsD int `json:"http_requests_d"`
+	SpeedHttpRequestsF int `json:"http_requests_f"`
+
 	SpeedFramesIn  int `json:"frames_in"`
 	SpeedFramesOut int `json:"frames_out"`
 	SpeedBytesIn   int `json:"bytes_in"`
@@ -154,6 +170,14 @@ func (c *Router) thStatistics() {
 		stat.BytesOut = c.stat.BytesOut - c.statLast.BytesOut
 		stat.FramesIn = c.stat.FramesIn - c.statLast.FramesIn
 		stat.FramesOut = c.stat.FramesOut - c.statLast.FramesOut
+
+		stat.HttpRequests = c.stat.HttpRequests - c.statLast.HttpRequests
+		stat.HttpRequestsR = c.stat.HttpRequestsR - c.statLast.HttpRequestsR
+		stat.HttpRequestsW = c.stat.HttpRequestsW - c.statLast.HttpRequestsW
+		stat.HttpRequestsN = c.stat.HttpRequestsN - c.statLast.HttpRequestsN
+		stat.HttpRequestsD = c.stat.HttpRequestsD - c.statLast.HttpRequestsD
+		stat.HttpRequestsF = c.stat.HttpRequestsF - c.statLast.HttpRequestsF
+
 		c.statLast = c.stat
 		c.mtx.Unlock()
 
@@ -165,10 +189,17 @@ func (c *Router) thStatistics() {
 		c.statSpeed.SpeedBytesKOut = c.statSpeed.SpeedBytesOut / 1024
 		c.statSpeed.SpeedBytesMIn = c.statSpeed.SpeedBytesIn / (1024 * 1024)
 		c.statSpeed.SpeedBytesMOut = c.statSpeed.SpeedBytesOut / (1024 * 1024)
-		c.statLastDT = now
-	}
 
-	c.buildDebugString()
+		c.statSpeed.SpeedHttpRequests = int(float64(stat.HttpRequests) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedHttpRequestsR = int(float64(stat.HttpRequestsR) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedHttpRequestsW = int(float64(stat.HttpRequestsW) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedHttpRequestsN = int(float64(stat.HttpRequestsN) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedHttpRequestsD = int(float64(stat.HttpRequestsD) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedHttpRequestsF = int(float64(stat.HttpRequestsF) / now.Sub(c.statLastDT).Seconds())
+
+		c.statLastDT = now
+		c.buildDebugString()
+	}
 }
 
 func (c *Router) thClearAddresses() {
@@ -289,6 +320,41 @@ func (c *Router) DebugString() (result []byte) {
 	return
 }
 
+func (c *Router) DeclareHttpRequestR() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsR++
+	c.mtx.Unlock()
+}
+
+func (c *Router) DeclareHttpRequestW() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsW++
+	c.mtx.Unlock()
+}
+
+func (c *Router) DeclareHttpRequestN() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsN++
+	c.mtx.Unlock()
+}
+
+func (c *Router) DeclareHttpRequestD() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsD++
+	c.mtx.Unlock()
+}
+
+func (c *Router) DeclareHttpRequestF() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsF++
+	c.mtx.Unlock()
+}
+
 func (c *Router) buildDebugString() {
 	type AddressInfo struct {
 		Address      string `json:"address"`
@@ -327,6 +393,8 @@ func (c *Router) buildDebugString() {
 	c.mtx.Lock()
 	c.lastDebugInfo = bsJson
 	c.mtx.Unlock()
+
+	logger.Println("stat", string(bsJson))
 
 	return
 }
