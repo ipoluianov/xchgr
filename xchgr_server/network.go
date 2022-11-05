@@ -21,26 +21,20 @@ type Network struct {
 	fromInternet       bool
 	fromInternetLoaded bool
 
-	Name       string  `json:"name"`
-	EthAddress string  `json:"eth_addr"`
-	SolAddress string  `json:"sol_addr"`
-	Ranges     []*rng  `json:"ranges"`
-	Gateways   []*host `json:"gateways"`
+	Name     string  `json:"name"`
+	Ranges   []*rng  `json:"ranges"`
+	Gateways []*host `json:"gateways"`
 }
 
 type host struct {
-	Address    string `json:"address"`
-	Name       string `json:"name"`
-	EthAddress string `json:"eth_addr"`
-	SolAddress string `json:"sol_addr"`
+	Address string `json:"address"`
+	Name    string `json:"name"`
 }
 
 func NewHost(address string) *host {
 	var c host
 	c.Address = address
 	c.Name = "MainNet"
-	c.EthAddress = "0x60087f17b9dAF691DEd6c40Cb1fA6CE4407fa58C"
-	c.SolAddress = "todo"
 	return &c
 }
 
@@ -123,9 +117,9 @@ func NewNetworkFromFileOrCreate(fileName string) (network *Network) {
 
 func NewNetworkDefault() *Network {
 	network := NewNetwork()
-	s1 := "54.37.73.160:8484"
-	s2 := "54.37.73.229:8484"
-	s3 := "134.0.115.16:8484"
+	s1 := "54.37.73.160:8084"
+	s2 := "54.37.73.229:8084"
+	s3 := "134.0.115.16:8084"
 
 	for r := 0; r < 16; r++ {
 		rangePrefix := fmt.Sprintf("%X", r)
@@ -181,8 +175,6 @@ func (c *Network) init() {
 	c.Ranges = make([]*rng, 0)
 	c.Gateways = make([]*host, 0)
 	c.Name = "MainNet"
-	c.EthAddress = "0x60087f17b9dAF691DEd6c40Cb1fA6CE4407fa58C"
-	c.SolAddress = "todo"
 }
 
 func (c *Network) AddHostToRange(prefix string, address string) {

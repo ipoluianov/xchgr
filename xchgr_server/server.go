@@ -5,7 +5,9 @@ import (
 	"crypto/x509"
 	"encoding/base32"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +28,36 @@ type Router struct {
 	nextId  uint64
 
 	addresses map[string]*AddressStorage
+
+	// Statistics
+	stat       RouterStatistics
+	statLast   RouterStatistics
+	statLastDT time.Time
+	statSpeed  RouterSpeedStatistics
+
+	lastDebugInfo []byte
+
+	clearAddressesLastDT time.Time
+}
+
+type RouterStatistics struct {
+	FramesIn  int `json:"frames_in"`
+	FramesOut int `json:"frames_out"`
+	BytesIn   int `json:"bytes_in"`
+	BytesOut  int `json:"bytes_out"`
+}
+
+type RouterSpeedStatistics struct {
+	SpeedFramesIn  int `json:"frames_in"`
+	SpeedFramesOut int `json:"frames_out"`
+	SpeedBytesIn   int `json:"bytes_in"`
+	SpeedBytesOut  int `json:"bytes_out"`
+
+	SpeedBytesKIn  int `json:"kilobytes_in"`
+	SpeedBytesKOut int `json:"kilobytes_out"`
+
+	SpeedBytesMIn  int `json:"megabytes_in"`
+	SpeedBytesMOut int `json:"megabytes_out"`
 }
 
 const (
@@ -39,6 +71,9 @@ func NewRouter() *Router {
 	c.network = NewNetworkDefault()
 	c.nonces = NewNonces(100000)
 	c.addresses = make(map[string]*AddressStorage)
+
+	c.statLastDT = time.Now()
+	c.clearAddressesLastDT = time.Now()
 	return &c
 }
 
@@ -53,6 +88,8 @@ func (c *Router) Start() error {
 	if c.stopping {
 		return errors.New("it is stopping")
 	}
+
+	go c.thBackgroundOperations()
 
 	return nil
 }
@@ -87,9 +124,73 @@ func (c *Router) Stop() error {
 	return nil
 }
 
-func (c *Router) backgroundOperations() {
+func (c *Router) NetworkBS() (result []byte, err error) {
 	c.mtx.Lock()
+	result, err = json.MarshalIndent(c.network, "", " ")
 	c.mtx.Unlock()
+	return
+}
+
+func (c *Router) thBackgroundOperations() {
+	for {
+		c.mtx.Lock()
+		stopping := c.stopping
+		c.mtx.Unlock()
+		if stopping {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+		c.thStatistics()
+		c.thClearAddresses()
+	}
+}
+
+func (c *Router) thStatistics() {
+	now := time.Now()
+	if now.Sub(c.statLastDT) >= 1*time.Second {
+		c.mtx.Lock()
+		var stat RouterStatistics
+		stat.BytesIn = c.stat.BytesIn - c.statLast.BytesIn
+		stat.BytesOut = c.stat.BytesOut - c.statLast.BytesOut
+		stat.FramesIn = c.stat.FramesIn - c.statLast.FramesIn
+		stat.FramesOut = c.stat.FramesOut - c.statLast.FramesOut
+		c.statLast = c.stat
+		c.mtx.Unlock()
+
+		c.statSpeed.SpeedBytesIn = int(float64(stat.BytesIn) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedBytesOut = int(float64(stat.BytesOut) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedFramesIn = int(float64(stat.FramesIn) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedFramesOut = int(float64(stat.FramesOut) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedBytesKIn = c.statSpeed.SpeedBytesIn / 1024
+		c.statSpeed.SpeedBytesKOut = c.statSpeed.SpeedBytesOut / 1024
+		c.statSpeed.SpeedBytesMIn = c.statSpeed.SpeedBytesIn / (1024 * 1024)
+		c.statSpeed.SpeedBytesMOut = c.statSpeed.SpeedBytesOut / (1024 * 1024)
+		c.statLastDT = now
+	}
+
+	c.buildDebugString()
+}
+
+func (c *Router) thClearAddresses() {
+	now := time.Now()
+	if now.Sub(c.clearAddressesLastDT) >= 1*time.Second {
+		c.mtx.Lock()
+		addresses := make([]*AddressStorage, 0)
+		for address, addressStorage := range c.addresses {
+			if now.Sub(addressStorage.TouchDT) > 10*time.Second {
+				delete(c.addresses, address)
+				continue
+			}
+			addresses = append(addresses, addressStorage)
+		}
+		c.mtx.Unlock()
+
+		for _, a := range addresses {
+			a.Clear()
+		}
+
+		c.clearAddressesLastDT = now
+	}
 }
 
 func (c *Router) Put(frame []byte) {
@@ -97,7 +198,7 @@ func (c *Router) Put(frame []byte) {
 	var addressStorage *AddressStorage
 
 	addressDestBS := frame[70:100]
-	addressDest := "#" + base32.StdEncoding.EncodeToString(addressDestBS)
+	addressDest := "#" + strings.ToLower(base32.StdEncoding.EncodeToString(addressDestBS))
 	//fmt.Println("FRAME to ", addressDest, frame[8])
 
 	c.mtx.Lock()
@@ -111,166 +212,50 @@ func (c *Router) Put(frame []byte) {
 	c.mtx.Unlock()
 
 	addressStorage.Put(id, frame)
-}
-
-func (c *Router) processFrames(frames []byte) (response []byte, err error) {
-	offset := 0
-
-	for offset < len(frames) {
-		if offset+128 <= len(frames) {
-			frameLen := int(binary.LittleEndian.Uint32(frames[offset:]))
-			if offset+frameLen <= len(frames) {
-				response, err = c.processFrame(frames[offset : offset+frameLen])
-				if err != nil {
-					return
-				}
-			} else {
-				break
-			}
-			offset += frameLen
-		} else {
-			break
-		}
-	}
-	return
-}
-
-func (c *Router) processFrame(frame []byte) (response []byte, err error) {
-	if len(frame) < 128 {
-		return
-	}
-	//fmt.Println("processFrame", frame[8])
-
-	frameType := frame[8]
-
-	if frameType < 0x10 {
-		switch frameType {
-		case 0x00:
-			response, err = c.processFrame00(frame)
-		case 0x01:
-			response, err = c.processFrame01(frame)
-		case 0x02:
-			response, err = c.processFrame02(frame)
-		case 0x03:
-			response, err = c.processFrame03(frame)
-		case 0x04:
-			response, err = c.processFrame04(frame)
-		case 0x05:
-			response, err = c.processFrame05(frame)
-		case 0x06:
-			response, err = c.processFrame06(frame)
-		case 0x07:
-			response, err = c.processFrame07(frame)
-		case 0x08:
-			response, err = c.processFrame08(frame)
-		case 0x09:
-			response, err = c.processFrame09(frame)
-		}
-	} else {
-
-		c.Put(frame)
-	}
-
-	return
-}
-
-// Ping request
-func (c *Router) processFrame00(frame []byte) (response []byte, err error) {
-	response = make([]byte, len(frame))
-	copy(response, frame)
-	response[8] = 0x01
-	return
-}
-
-// Ping response
-func (c *Router) processFrame01(frame []byte) (response []byte, err error) {
-	return
-}
-
-// GetNonce request
-func (c *Router) processFrame02(frame []byte) (response []byte, err error) {
-	response = make([]byte, 128+16)
-	nonce := c.nonces.Next()
-	copy(response[128:], nonce[:])
-	return
-}
-
-// GetNonce response
-func (c *Router) processFrame03(frame []byte) (response []byte, err error) {
-	return
-}
-
-// Get messages headers request
-func (c *Router) processFrame04(frame []byte) (response []byte, err error) {
-	return
-}
-
-// Get messages headers response
-func (c *Router) processFrame05(frame []byte) (response []byte, err error) {
-	return
+	c.stat.FramesIn++
+	c.stat.BytesIn += len(frame)
 }
 
 // Get message request
-func (c *Router) processFrame06(frame []byte) (response []byte, err error) {
+func (c *Router) GetMessages(frame []byte) (response []byte, err error) {
 	var ok bool
 	var addressStorage *AddressStorage
 
-	if len(frame) < 128+8 {
+	if len(frame) < 46 {
 		err = errors.New("wrong frame size")
 		return
 	}
 
-	afterId := binary.LittleEndian.Uint64(frame[128+0:])
-	maxSize := binary.LittleEndian.Uint64(frame[128+8:])
+	afterId := binary.LittleEndian.Uint64(frame[0:])
+	maxSize := binary.LittleEndian.Uint64(frame[8:])
+	addressSrcBS := frame[16 : 16+30]
 
-	addressSrcBS := frame[40:70]
-	addressSrc := "#" + base32.StdEncoding.EncodeToString(addressSrcBS)
+	addressSrc := "#" + strings.ToLower(base32.StdEncoding.EncodeToString(addressSrcBS))
 
 	c.mtx.Lock()
 	addressStorage, ok = c.addresses[addressSrc]
 	c.mtx.Unlock()
 
 	if !ok || addressStorage == nil {
+		response = make([]byte, 8)
+		binary.LittleEndian.PutUint64(response[0:], 0)
 		return
 	}
 
-	msgData, lastId := addressStorage.GetMessage(afterId, maxSize)
+	msgData, lastId, count := addressStorage.GetMessage(afterId, maxSize)
 	response = make([]byte, 8+len(msgData))
 	binary.LittleEndian.PutUint64(response[0:], lastId)
 	if msgData != nil {
 		copy(response[8:], msgData)
 	}
 
+	c.stat.FramesOut += count
+	c.stat.BytesOut += len(msgData)
 	return
 }
 
 func RSAPublicKeyFromDer(publicKeyDer []byte) (publicKey *rsa.PublicKey, err error) {
 	publicKey, err = x509.ParsePKCS1PublicKey(publicKeyDer)
-	return
-}
-
-// Get message response
-func (c *Router) processFrame07(frame []byte) (response []byte, err error) {
-	return
-}
-
-// Resolve name request
-func (c *Router) processFrame08(frame []byte) (response []byte, err error) {
-	return
-}
-
-// Resolve name response
-func (c *Router) processFrame09(frame []byte) (response []byte, err error) {
-	return
-}
-
-// Put call
-func (c *Router) processFrame10(frame []byte) (response []byte, err error) {
-	return
-}
-
-// Put answer
-func (c *Router) processFrame11(frame []byte) (response []byte, err error) {
 	return
 }
 
@@ -293,6 +278,56 @@ func (c *Router) resolveAddress(address string) (nativeAddress string, err error
 	}
 
 	err = errors.New("unknown address")
+	return
+}
+
+func (c *Router) DebugString() (result []byte) {
+	c.mtx.Lock()
+	result = make([]byte, len(c.lastDebugInfo))
+	copy(result, c.lastDebugInfo)
+	c.mtx.Unlock()
+	return
+}
+
+func (c *Router) buildDebugString() {
+	type AddressInfo struct {
+		Address      string `json:"address"`
+		MessageCount int    `json:"messages"`
+	}
+
+	type DebugInfo struct {
+		AddressCount int                   `json:"address_count"`
+		NextMsgId    int                   `json:"next_msg_id"`
+		Stat         RouterStatistics      `json:"stat_total"`
+		StatSpeed    RouterSpeedStatistics `json:"stat_in_second"`
+		Addresses    []AddressInfo         `json:"addresses"`
+	}
+
+	c.mtx.Lock()
+	var di DebugInfo
+	di.AddressCount = len(c.addresses)
+	di.NextMsgId = int(c.nextId)
+	di.Stat = c.stat
+	di.StatSpeed = c.statSpeed
+
+	di.Addresses = make([]AddressInfo, 0, len(c.addresses))
+	for address, a := range c.addresses {
+		var ai AddressInfo
+		ai.Address = address
+		ai.MessageCount = a.MessagesCount()
+		di.Addresses = append(di.Addresses, ai)
+	}
+	c.mtx.Unlock()
+
+	sort.Slice(di.Addresses, func(i, j int) bool {
+		return di.Addresses[i].Address < di.Addresses[j].Address
+	})
+
+	bsJson, _ := json.MarshalIndent(di, "", " ")
+	c.mtx.Lock()
+	c.lastDebugInfo = bsJson
+	c.mtx.Unlock()
+
 	return
 }
 

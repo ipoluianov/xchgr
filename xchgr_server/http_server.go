@@ -3,6 +3,7 @@ package xchgr_server
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"net/http"
@@ -36,7 +37,10 @@ func (c *HttpServer) Start(server *Router) {
 	c.server = server
 
 	c.r = mux.NewRouter()
-	c.r.HandleFunc("/api/request", c.processApiRequest)
+	c.r.HandleFunc("/api/w", c.processW)
+	c.r.HandleFunc("/api/r", c.processR)
+	c.r.HandleFunc("/api/n", c.processN)
+	c.r.HandleFunc("/api/debug", c.processDebug)
 	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)
 	c.srv = &http.Server{
 		Addr: ":8084",
@@ -65,26 +69,78 @@ func (c *HttpServer) Stop() error {
 	return err
 }
 
-func (c *HttpServer) processApiRequest(w http.ResponseWriter, r *http.Request) {
-	var err error
-	var responseText []byte
-	function := r.FormValue("fn")
+func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) {
+	result := []byte(c.server.DebugString())
+	_, _ = w.Write(result)
+	return
+}
 
+func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		if err := r.ParseMultipartForm(1000000); err != nil {
 			fmt.Fprintf(w, "ParseForm() err: %v", err)
 			return
 		}
-		function = r.FormValue("fn")
 	}
 
-	//fmt.Println("processApiRequest", function)
+	data64 := r.FormValue("d")
+	var dataBS []byte
+	var err error
+	dataBS, err = base64.StdEncoding.DecodeString(data64)
+	if err != nil {
+		return
+	}
+	var resultBS []byte
+	resultBS, err = c.server.GetMessages(dataBS)
+	if err != nil {
+		return
+	}
+	resultStr := base64.StdEncoding.EncodeToString(resultBS)
 
-	switch function {
-	case "d":
-		responseText, err = c.processD(w, r)
-	case "debug":
-		responseText, err = c.processDebug(w, r)
+	result := []byte(resultStr)
+	if err != nil {
+		w.WriteHeader(500)
+		b := []byte(err.Error())
+		_, _ = w.Write(b)
+		return
+	}
+	_, _ = w.Write([]byte(result))
+
+	return
+}
+
+func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		if err := r.ParseMultipartForm(1000000); err != nil {
+			fmt.Fprintf(w, "ParseForm() err: %v", err)
+			return
+		}
+	}
+
+	data64 := r.FormValue("d")
+	var dataBS []byte
+	var err error
+	dataBS, err = base64.StdEncoding.DecodeString(data64)
+	if err != nil {
+		return
+	}
+
+	offset := 0
+	for offset < len(dataBS) {
+		if offset+128 <= len(dataBS) {
+			frameLen := int(binary.LittleEndian.Uint32(dataBS[offset:]))
+			if offset+frameLen <= len(dataBS) {
+				c.server.Put(dataBS[offset : offset+frameLen])
+				if err != nil {
+					return
+				}
+			} else {
+				break
+			}
+			offset += frameLen
+		} else {
+			break
+		}
 	}
 
 	if err != nil {
@@ -94,27 +150,19 @@ func (c *HttpServer) processApiRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _ = w.Write([]byte(responseText))
-}
-
-func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) (result []byte, err error) {
 	return
 }
 
-func (c *HttpServer) processD(w http.ResponseWriter, r *http.Request) (result []byte, err error) {
-	data64 := r.FormValue("d")
-	var dataBS []byte
-	dataBS, err = base64.StdEncoding.DecodeString(data64)
+func (c *HttpServer) processN(w http.ResponseWriter, r *http.Request) {
+	result, err := c.server.NetworkBS()
 	if err != nil {
+		w.WriteHeader(500)
+		b := []byte(err.Error())
+		_, _ = w.Write(b)
 		return
 	}
-	var resultBS []byte
-	resultBS, err = c.server.processFrames(dataBS)
-	if err != nil {
-		return
-	}
-	resultStr := base64.StdEncoding.EncodeToString(resultBS)
-	result = []byte(resultStr)
+	_, _ = w.Write([]byte(result))
+
 	return
 }
 
