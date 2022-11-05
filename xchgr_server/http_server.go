@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,10 +18,12 @@ import (
 )
 
 type HttpServer struct {
-	srv      *http.Server
-	r        *mux.Router
-	server   *Router
-	stopping bool
+	srv                  *http.Server
+	r                    *mux.Router
+	server               *Router
+	longPollingTimeout   time.Duration
+	longPollingTickDelay time.Duration
+	stopping             bool
 }
 
 func CurrentExePath() string {
@@ -30,6 +33,8 @@ func CurrentExePath() string {
 
 func NewHttpServer() *HttpServer {
 	var c HttpServer
+	c.longPollingTimeout = 10 * time.Second
+	c.longPollingTickDelay = 10 * time.Millisecond
 	return &c
 }
 
@@ -93,7 +98,18 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var resultBS []byte
-	resultBS, err = c.server.GetMessages(dataBS)
+	beginLongPollingDT := time.Now()
+	for time.Now().Sub(beginLongPollingDT) < c.longPollingTimeout {
+		var count int
+		resultBS, count, err = c.server.GetMessages(dataBS)
+		if count > 0 || err != nil {
+			break
+		}
+		if errors.Is(r.Context().Err(), context.Canceled) {
+			break
+		}
+		time.Sleep(c.longPollingTickDelay)
+	}
 	if err != nil {
 		return
 	}

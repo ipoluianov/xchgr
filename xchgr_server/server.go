@@ -248,7 +248,7 @@ func (c *Router) Put(frame []byte) {
 }
 
 // Get message request
-func (c *Router) GetMessages(frame []byte) (response []byte, err error) {
+func (c *Router) GetMessages(frame []byte) (response []byte, count int, err error) {
 	var ok bool
 	var addressStorage *AddressStorage
 
@@ -273,7 +273,9 @@ func (c *Router) GetMessages(frame []byte) (response []byte, err error) {
 		return
 	}
 
-	msgData, lastId, count := addressStorage.GetMessage(afterId, maxSize)
+	var msgData []byte
+	var lastId uint64
+	msgData, lastId, count = addressStorage.GetMessage(afterId, maxSize)
 	response = make([]byte, 8+len(msgData))
 	binary.LittleEndian.PutUint64(response[0:], lastId)
 	if msgData != nil {
