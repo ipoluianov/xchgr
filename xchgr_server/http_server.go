@@ -179,6 +179,11 @@ func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processN(w http.ResponseWriter, r *http.Request) {
+	go c.THprocessN(w, r)
+	return
+}
+
+func (c *HttpServer) THprocessN(w http.ResponseWriter, r *http.Request) {
 	c.server.DeclareHttpRequestN()
 	result, err := c.server.NetworkBS()
 	if err != nil {
