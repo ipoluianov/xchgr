@@ -46,6 +46,7 @@ func (c *HttpServer) Start(server *Router, port int) {
 	c.r.HandleFunc("/api/w", c.processW)
 	c.r.HandleFunc("/api/r", c.processR)
 	c.r.HandleFunc("/api/n", c.processN)
+	c.r.HandleFunc("/api/0", c.process0)
 	c.r.HandleFunc("/api/debug", c.processDebug)
 	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)
 	c.srv = &http.Server{
@@ -180,6 +181,10 @@ func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
 
 func (c *HttpServer) processN(w http.ResponseWriter, r *http.Request) {
 	go c.THprocessN(w, r)
+	return
+}
+
+func (c *HttpServer) process0(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
