@@ -14,13 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/ipoluianov/gomisc/logger"
 )
 
 type HttpServer struct {
-	srv                  *http.Server
-	r                    *mux.Router
+	srv *http.Server
+	//r                    *mux.Router
 	server               *Router
 	longPollingTimeout   time.Duration
 	longPollingTickDelay time.Duration
@@ -42,19 +41,23 @@ func NewHttpServer() *HttpServer {
 func (c *HttpServer) Start(server *Router, port int) {
 	c.server = server
 
-	c.r = mux.NewRouter()
+	/*c.r = mux.NewRouter()
 	c.r.HandleFunc("/api/w", c.processW)
 	c.r.HandleFunc("/api/r", c.processR)
 	c.r.HandleFunc("/api/n", c.processN)
 	c.r.HandleFunc("/api/0", c.process0)
 	c.r.HandleFunc("/api/debug", c.processDebug)
-	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)
+	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)*/
 	c.srv = &http.Server{
 		Addr: ":" + fmt.Sprint(port),
 	}
 
-	c.srv.Handler = c.r
+	c.srv.Handler = c
 	go c.thListen()
+}
+
+func (c HttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	go c.process0(w, r)
 }
 
 func (c *HttpServer) thListen() {
