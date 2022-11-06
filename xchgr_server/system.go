@@ -1,12 +1,14 @@
 package xchgr_server
 
 type System struct {
+	port       int
 	router     *Router
 	httpServer *HttpServer
 }
 
-func NewSystem() *System {
+func NewSystem(port int) *System {
 	var c System
+	c.port = port
 	c.router = NewRouter()
 	c.httpServer = NewHttpServer()
 	return &c
@@ -14,7 +16,7 @@ func NewSystem() *System {
 
 func (c *System) Start() {
 	c.router.Start()
-	c.httpServer.Start(c.router)
+	c.httpServer.Start(c.router, c.port)
 }
 
 func (c *System) Stop() {

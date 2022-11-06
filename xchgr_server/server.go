@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/ipoluianov/gomisc/logger"
 )
 
 type Router struct {
@@ -230,7 +228,7 @@ func (c *Router) Put(frame []byte) {
 
 	addressDestBS := frame[70:100]
 	addressDest := "#" + strings.ToLower(base32.StdEncoding.EncodeToString(addressDestBS))
-	//fmt.Println("FRAME to ", addressDest, frame[8])
+	//fmt.Println("<FRAME to ", addressDest, frame[8])
 
 	c.mtx.Lock()
 	addressStorage, ok = c.addresses[addressDest]
@@ -396,7 +394,7 @@ func (c *Router) buildDebugString() {
 	c.lastDebugInfo = bsJson
 	c.mtx.Unlock()
 
-	logger.Println("stat", string(bsJson))
+	//logger.Println("stat", string(bsJson))
 
 	return
 }

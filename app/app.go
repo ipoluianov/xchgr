@@ -162,12 +162,24 @@ func (p *program) Stop(_ service.Service) error {
 // ///////////////////////////
 var system *xchgr_server.System
 
+var systems []*xchgr_server.System
+
 func Start() error {
 	logger.Println("[i]", "App::Start", "begin")
 	TuneFDs()
 
-	system = xchgr_server.NewSystem()
-	system.Start()
+	real := true
+	if real {
+		system = xchgr_server.NewSystem(8084)
+		system.Start()
+	} else {
+		systems = make([]*xchgr_server.System, 0)
+		for i := 8084; i < 8087; i++ {
+			system = xchgr_server.NewSystem(i)
+			system.Start()
+			systems = append(systems, system)
+		}
+	}
 
 	logger.Println("[i]", "App::Start", "end")
 

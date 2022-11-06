@@ -2,6 +2,7 @@ package xchgr_server
 
 import (
 	"context"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -38,7 +39,7 @@ func NewHttpServer() *HttpServer {
 	return &c
 }
 
-func (c *HttpServer) Start(server *Router) {
+func (c *HttpServer) Start(server *Router, port int) {
 	c.server = server
 
 	c.r = mux.NewRouter()
@@ -48,7 +49,7 @@ func (c *HttpServer) Start(server *Router) {
 	c.r.HandleFunc("/api/debug", c.processDebug)
 	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)
 	c.srv = &http.Server{
-		Addr: ":8084",
+		Addr: ":" + fmt.Sprint(port),
 	}
 
 	c.srv.Handler = c.r
@@ -97,6 +98,11 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+
+	addrTemp := base32.StdEncoding.EncodeToString(dataBS[16 : 16+30])
+
+	addrTemp = strings.ToLower(addrTemp)
+
 	var resultBS []byte
 	beginLongPollingDT := time.Now()
 	for time.Now().Sub(beginLongPollingDT) < c.longPollingTimeout {

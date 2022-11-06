@@ -52,12 +52,22 @@ func (c *AddressStorage) Put(id uint64, frame []byte) {
 }
 
 func (c *AddressStorage) GetMessage(afterId uint64, maxSize uint64) (data []byte, lastId uint64, count int) {
+
 	data = make([]byte, 0)
 	lastId = afterId
 	count = 0
+	sendAll := false
 	c.mtx.Lock()
+
+	if len(c.messages) > 0 {
+		if afterId > c.messages[len(c.messages)-1].id {
+			afterId = c.messages[0].id
+			sendAll = true
+		}
+	}
+
 	for _, m := range c.messages {
-		if m.id > afterId {
+		if m.id > afterId || sendAll {
 			if len(data)+len(m.data) < int(maxSize) {
 				data = append(data, m.data...)
 				lastId = m.id
