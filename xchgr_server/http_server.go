@@ -83,10 +83,6 @@ func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
-	go c.processR_th(w, r)
-}
-
-func (c *HttpServer) processR_th(w http.ResponseWriter, r *http.Request) {
 	c.server.DeclareHttpRequestR()
 	if r.Method == "POST" {
 		if err := r.ParseMultipartForm(1000000); err != nil {
@@ -138,10 +134,6 @@ func (c *HttpServer) processR_th(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
-	go c.processW_th(w, r)
-}
-
-func (c *HttpServer) processW_th(w http.ResponseWriter, r *http.Request) {
 	c.server.DeclareHttpRequestW()
 	if r.Method == "POST" {
 		if err := r.ParseMultipartForm(1000000); err != nil {
