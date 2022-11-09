@@ -76,6 +76,7 @@ func (c *HttpServer) Stop() error {
 }
 
 func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c.server.DeclareHttpRequestD()
 	result := []byte(c.server.DebugString())
 	_, _ = w.Write(result)
@@ -83,6 +84,7 @@ func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c.server.DeclareHttpRequestR()
 	if r.Method == "POST" {
 		if err := r.ParseMultipartForm(1000000); err != nil {
@@ -134,6 +136,7 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c.server.DeclareHttpRequestW()
 	if r.Method == "POST" {
 		if err := r.ParseMultipartForm(1000000); err != nil {
@@ -179,6 +182,7 @@ func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processN(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c.server.DeclareHttpRequestN()
 	result, err := c.server.NetworkBS()
 	if err != nil {
