@@ -84,8 +84,15 @@ func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c.server.DeclareHttpRequestR()
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Request-Method", "POST")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		return
+	}
+
 	if r.Method == "POST" {
 		if err := r.ParseMultipartForm(1000000); err != nil {
 			fmt.Fprintf(w, "ParseForm() err: %v", err)
@@ -136,8 +143,15 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c.server.DeclareHttpRequestW()
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Request-Method", "POST")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		return
+	}
+
 	if r.Method == "POST" {
 		if err := r.ParseMultipartForm(1000000); err != nil {
 			fmt.Fprintf(w, "ParseForm() err: %v", err)
