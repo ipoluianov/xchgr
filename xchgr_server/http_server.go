@@ -47,6 +47,7 @@ func (c *HttpServer) Start(server *Router, port int) {
 	c.r.HandleFunc("/api/r", c.processR)
 	c.r.HandleFunc("/api/n", c.processN)
 	c.r.HandleFunc("/api/debug", c.processDebug)
+	c.r.HandleFunc("/api/stat", c.processStat)
 	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)
 	c.srv = &http.Server{
 		Addr: ":" + fmt.Sprint(port),
@@ -79,6 +80,14 @@ func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c.server.DeclareHttpRequestD()
 	result := []byte(c.server.DebugString())
+	_, _ = w.Write(result)
+	return
+}
+
+func (c *HttpServer) processStat(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	c.server.DeclareHttpRequestS()
+	result := []byte(c.server.StatString())
 	_, _ = w.Write(result)
 	return
 }

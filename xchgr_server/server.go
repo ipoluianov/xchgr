@@ -36,6 +36,7 @@ type Router struct {
 	statSpeed  RouterSpeedStatistics
 
 	lastDebugInfo []byte
+	lastStatInfo  []byte
 
 	clearAddressesLastDT time.Time
 }
@@ -51,6 +52,7 @@ type RouterStatistics struct {
 	HttpRequestsW int `json:"http_requests_w"`
 	HttpRequestsN int `json:"http_requests_n"`
 	HttpRequestsD int `json:"http_requests_d"`
+	HttpRequestsS int `json:"http_requests_s"`
 	HttpRequestsF int `json:"http_requests_f"`
 }
 
@@ -320,6 +322,14 @@ func (c *Router) DebugString() (result []byte) {
 	return
 }
 
+func (c *Router) StatString() (result []byte) {
+	c.mtx.Lock()
+	result = make([]byte, len(c.lastStatInfo))
+	copy(result, c.lastStatInfo)
+	c.mtx.Unlock()
+	return
+}
+
 func (c *Router) DeclareHttpRequestR() {
 	c.mtx.Lock()
 	c.stat.HttpRequests++
@@ -345,6 +355,13 @@ func (c *Router) DeclareHttpRequestD() {
 	c.mtx.Lock()
 	c.stat.HttpRequests++
 	c.stat.HttpRequestsD++
+	c.mtx.Unlock()
+}
+
+func (c *Router) DeclareHttpRequestS() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsS++
 	c.mtx.Unlock()
 }
 
@@ -389,9 +406,11 @@ func (c *Router) buildDebugString() {
 		return di.Addresses[i].Address < di.Addresses[j].Address
 	})
 
-	bsJson, _ := json.MarshalIndent(di, "", " ")
+	bsDebug, _ := json.MarshalIndent(di, "", " ")
+	bsStatSpeed, _ := json.MarshalIndent(di.StatSpeed, "", " ")
 	c.mtx.Lock()
-	c.lastDebugInfo = bsJson
+	c.lastDebugInfo = bsDebug
+	c.lastStatInfo = bsStatSpeed
 	c.mtx.Unlock()
 
 	//logger.Println("stat", string(bsJson))
