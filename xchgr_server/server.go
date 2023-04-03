@@ -85,7 +85,7 @@ const (
 func NewRouter() *Router {
 	var c Router
 	c.network = NewNetworkDefault()
-	c.nonces = NewNonces(100000)
+	c.nonces = NewNonces(1000000)
 	c.addresses = make(map[string]*AddressStorage)
 
 	c.statLastDT = time.Now()
