@@ -1,7 +1,6 @@
-# xchgr
-XCHG router service
-
+# XCHG router service
 This is HTTP-server. It uses port 8084 (HTTP 1.1 without SSL).
+This is for exchanging packets between network nodes.
 
 ## API
 ### Write Frames
