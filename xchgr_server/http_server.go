@@ -2,7 +2,6 @@ package xchgr_server
 
 import (
 	"context"
-	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -16,12 +15,16 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/ipoluianov/gomisc/logger"
+	"github.com/ipoluianov/xchgr/blockchain/name_client"
+	"github.com/ipoluianov/xchgr/blockchain/premium_client"
 )
 
 type HttpServer struct {
 	srv                  *http.Server
 	r                    *mux.Router
 	server               *Router
+	nameClient           *name_client.NameClient
+	premiumClient        *premium_client.PremiumClient
 	longPollingTimeout   time.Duration
 	longPollingTickDelay time.Duration
 	stopping             bool
@@ -36,6 +39,8 @@ func NewHttpServer() *HttpServer {
 	var c HttpServer
 	c.longPollingTimeout = 10 * time.Second
 	c.longPollingTickDelay = 10 * time.Millisecond
+	c.nameClient = name_client.NewNameClient()
+	c.premiumClient = premium_client.NewPremiumClient()
 	return &c
 }
 
@@ -46,6 +51,7 @@ func (c *HttpServer) Start(server *Router, port int) {
 	c.r.HandleFunc("/api/w", c.processW)
 	c.r.HandleFunc("/api/r", c.processR)
 	c.r.HandleFunc("/api/n", c.processN)
+	c.r.HandleFunc("/api/ns", c.processNS)
 	c.r.HandleFunc("/api/debug", c.processDebug)
 	c.r.HandleFunc("/api/stat", c.processStat)
 	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)
@@ -81,7 +87,6 @@ func (c *HttpServer) processDebug(w http.ResponseWriter, r *http.Request) {
 	c.server.DeclareHttpRequestD()
 	result := []byte(c.server.DebugString())
 	_, _ = w.Write(result)
-	return
 }
 
 func (c *HttpServer) processStat(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +94,6 @@ func (c *HttpServer) processStat(w http.ResponseWriter, r *http.Request) {
 	c.server.DeclareHttpRequestS()
 	result := []byte(c.server.StatString())
 	_, _ = w.Write(result)
-	return
 }
 
 func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
@@ -117,9 +121,9 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addrTemp := base32.StdEncoding.EncodeToString(dataBS[16 : 16+30])
+	//addrTemp := base32.StdEncoding.EncodeToString(dataBS[16 : 16+30])
 
-	addrTemp = strings.ToLower(addrTemp)
+	//addrTemp = strings.ToLower(addrTemp)
 
 	var resultBS []byte
 	beginLongPollingDT := time.Now()
@@ -147,8 +151,6 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write([]byte(result))
-
-	return
 }
 
 func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
@@ -200,8 +202,6 @@ func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(b)
 		return
 	}
-
-	return
 }
 
 func (c *HttpServer) processN(w http.ResponseWriter, r *http.Request) {
@@ -215,40 +215,26 @@ func (c *HttpServer) processN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write([]byte(result))
+}
 
-	return
+func (c *HttpServer) processNS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	name := r.FormValue("name")
+	c.server.DeclareHttpRequestNS()
+	result, err := c.nameClient.GetAddressByName(name)
+	if err != nil {
+		w.WriteHeader(500)
+		b := []byte(err.Error())
+		_, _ = w.Write(b)
+		return
+	}
+	_, _ = w.Write([]byte(result))
 }
 
 func SplitRequest(path string) []string {
 	return strings.FieldsFunc(path, func(r rune) bool {
 		return r == '/'
 	})
-}
-
-func (c *HttpServer) contentTypeByExt(ext string) string {
-	var builtinTypesLower = map[string]string{
-		".css":  "text/css; charset=utf-8",
-		".gif":  "image/gif",
-		".htm":  "text/html; charset=utf-8",
-		".html": "text/html; charset=utf-8",
-		".jpeg": "image/jpeg",
-		".jpg":  "image/jpeg",
-		".js":   "text/javascript; charset=utf-8",
-		".mjs":  "text/javascript; charset=utf-8",
-		".pdf":  "application/pdf",
-		".png":  "image/png",
-		".svg":  "image/svg+xml",
-		".wasm": "application/wasm",
-		".webp": "image/webp",
-		".xml":  "text/xml; charset=utf-8",
-	}
-
-	logger.Println("Ext: ", ext)
-
-	if ct, ok := builtinTypesLower[ext]; ok {
-		return ct
-	}
-	return "text/plain"
 }
 
 func (c *HttpServer) processFile(w http.ResponseWriter, r *http.Request) {

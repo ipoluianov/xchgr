@@ -47,22 +47,24 @@ type RouterStatistics struct {
 	BytesIn   int `json:"bytes_in"`
 	BytesOut  int `json:"bytes_out"`
 
-	HttpRequests  int `json:"http_requests"`
-	HttpRequestsR int `json:"http_requests_r"`
-	HttpRequestsW int `json:"http_requests_w"`
-	HttpRequestsN int `json:"http_requests_n"`
-	HttpRequestsD int `json:"http_requests_d"`
-	HttpRequestsS int `json:"http_requests_s"`
-	HttpRequestsF int `json:"http_requests_f"`
+	HttpRequests   int `json:"http_requests"`
+	HttpRequestsR  int `json:"http_requests_r"`
+	HttpRequestsW  int `json:"http_requests_w"`
+	HttpRequestsN  int `json:"http_requests_n"`
+	HttpRequestsNS int `json:"http_requests_ns"`
+	HttpRequestsD  int `json:"http_requests_d"`
+	HttpRequestsS  int `json:"http_requests_s"`
+	HttpRequestsF  int `json:"http_requests_f"`
 }
 
 type RouterSpeedStatistics struct {
-	SpeedHttpRequests  int `json:"http_requests"`
-	SpeedHttpRequestsR int `json:"http_requests_r"`
-	SpeedHttpRequestsW int `json:"http_requests_w"`
-	SpeedHttpRequestsN int `json:"http_requests_n"`
-	SpeedHttpRequestsD int `json:"http_requests_d"`
-	SpeedHttpRequestsF int `json:"http_requests_f"`
+	SpeedHttpRequests   int `json:"http_requests"`
+	SpeedHttpRequestsR  int `json:"http_requests_r"`
+	SpeedHttpRequestsW  int `json:"http_requests_w"`
+	SpeedHttpRequestsN  int `json:"http_requests_n"`
+	SpeedHttpRequestsNS int `json:"http_requests_ns"`
+	SpeedHttpRequestsD  int `json:"http_requests_d"`
+	SpeedHttpRequestsF  int `json:"http_requests_f"`
 
 	SpeedFramesIn  int `json:"frames_in"`
 	SpeedFramesOut int `json:"frames_out"`
@@ -175,6 +177,7 @@ func (c *Router) thStatistics() {
 		stat.HttpRequestsR = c.stat.HttpRequestsR - c.statLast.HttpRequestsR
 		stat.HttpRequestsW = c.stat.HttpRequestsW - c.statLast.HttpRequestsW
 		stat.HttpRequestsN = c.stat.HttpRequestsN - c.statLast.HttpRequestsN
+		stat.HttpRequestsNS = c.stat.HttpRequestsNS - c.statLast.HttpRequestsNS
 		stat.HttpRequestsD = c.stat.HttpRequestsD - c.statLast.HttpRequestsD
 		stat.HttpRequestsF = c.stat.HttpRequestsF - c.statLast.HttpRequestsF
 
@@ -194,6 +197,7 @@ func (c *Router) thStatistics() {
 		c.statSpeed.SpeedHttpRequestsR = int(float64(stat.HttpRequestsR) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsW = int(float64(stat.HttpRequestsW) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsN = int(float64(stat.HttpRequestsN) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.SpeedHttpRequestsNS = int(float64(stat.HttpRequestsNS) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsD = int(float64(stat.HttpRequestsD) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsF = int(float64(stat.HttpRequestsF) / now.Sub(c.statLastDT).Seconds())
 
@@ -348,6 +352,13 @@ func (c *Router) DeclareHttpRequestN() {
 	c.mtx.Lock()
 	c.stat.HttpRequests++
 	c.stat.HttpRequestsN++
+	c.mtx.Unlock()
+}
+
+func (c *Router) DeclareHttpRequestNS() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsNS++
 	c.mtx.Unlock()
 }
 
