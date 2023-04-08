@@ -1,5 +1,7 @@
 package name_client
 
+import "errors"
+
 type NameClient struct {
 }
 
@@ -9,5 +11,8 @@ func NewNameClient() *NameClient {
 }
 
 func (c *NameClient) GetAddressByName(name string) (string, error) {
-	return "-TODO-ADDRESS-", nil
+	if name == "work.xchg" {
+		return "#pem53ka2436w5bqgeaaqjud5uki4i7msbphqdezjehkz6ghp", nil
+	}
+	return "", errors.New("no address")
 }

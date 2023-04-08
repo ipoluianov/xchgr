@@ -1,17 +1,28 @@
 # xchgr
 XCHG router service
 
-00 Ping request
-01 Ping response
+This is HTTP-server. It uses port 8084 (HTTP 1.1 without SSL).
 
-02 GetNonce request
-03 GetNonce response
-
-04 PutData request
-05 PutData response
-
-06 GetData request
-07 GetData response
-
-08 GetNetwork request
-09 GetNetwork response
+## API
+### Write Frames
+```
+/api/w
+```
+### Read Frames
+```
+/api/r
+```
+### Resolve xchg Domain Name
+```
+/api/ns
+```
+### Get Debug Information
+```
+/api/debug
+```
+No parameters. It returns JSON.
+### Get Statistics
+```
+/api/stat
+```
+No parameters. It returns JSON.

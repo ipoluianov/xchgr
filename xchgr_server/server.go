@@ -142,13 +142,6 @@ func (c *Router) Stop() error {
 	return nil
 }
 
-func (c *Router) NetworkBS() (result []byte, err error) {
-	c.mtx.Lock()
-	result, err = json.MarshalIndent(c.network, "", " ")
-	c.mtx.Unlock()
-	return
-}
-
 func (c *Router) thBackgroundOperations() {
 	for {
 		c.mtx.Lock()
