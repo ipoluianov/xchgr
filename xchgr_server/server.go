@@ -296,7 +296,7 @@ func RSAPublicKeyFromDer(publicKeyDer []byte) (publicKey *rsa.PublicKey, err err
 	return
 }
 
-func (c *Router) resolveAddress(address string) (nativeAddress string, err error) {
+/*func (c *Router) resolveAddress(address string) (nativeAddress string, err error) {
 	if len(address) < 1 {
 		err = errors.New("empty address")
 		return
@@ -316,7 +316,7 @@ func (c *Router) resolveAddress(address string) (nativeAddress string, err error
 
 	err = errors.New("unknown address")
 	return
-}
+}*/
 
 func (c *Router) DebugString() (result []byte) {
 	c.mtx.Lock()
@@ -425,8 +425,6 @@ func (c *Router) buildDebugString() {
 	c.mtx.Unlock()
 
 	//logger.Println("stat", string(bsJson))
-
-	return
 }
 
 const AddressBytesSize = 30
