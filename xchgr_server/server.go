@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+const (
+	VERSION = int(24)
+)
+
 type Router struct {
 	// Sync
 	mtx sync.Mutex
@@ -76,6 +80,8 @@ type RouterSpeedStatistics struct {
 
 	SpeedBytesMIn  int `json:"megabytes_in"`
 	SpeedBytesMOut int `json:"megabytes_out"`
+
+	Version int `json:"version"`
 }
 
 const (
@@ -193,6 +199,7 @@ func (c *Router) thStatistics() {
 		c.statSpeed.SpeedHttpRequestsNS = int(float64(stat.HttpRequestsNS) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsD = int(float64(stat.HttpRequestsD) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsF = int(float64(stat.HttpRequestsF) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.Version = VERSION
 
 		c.statLastDT = now
 		c.buildDebugString()
