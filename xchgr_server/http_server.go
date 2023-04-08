@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,7 +26,6 @@ type HttpServer struct {
 	premiumClient        *premium_client.PremiumClient
 	longPollingTimeout   time.Duration
 	longPollingTickDelay time.Duration
-	stopping             bool
 }
 
 func CurrentExePath() string {
@@ -127,7 +125,7 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 
 	var resultBS []byte
 	beginLongPollingDT := time.Now()
-	for time.Now().Sub(beginLongPollingDT) < c.longPollingTimeout {
+	for time.Since(beginLongPollingDT) < c.longPollingTimeout {
 		var count int
 		resultBS, count, err = c.server.GetMessages(dataBS)
 		if count > 0 || err != nil {
@@ -242,7 +240,7 @@ func (c *HttpServer) processFile(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("wrong request"))
 }
 
-func getRealAddr(r *http.Request) string {
+/*func getRealAddr(r *http.Request) string {
 
 	remoteIP := ""
 	// the default is the originating ip. but we try to find better options because this is almost
@@ -275,3 +273,4 @@ func (c *HttpServer) redirect(w http.ResponseWriter, r *http.Request, url string
 	w.Header().Set("X-Accel-Expires", "0")
 	http.Redirect(w, r, url, 307)
 }
+*/
