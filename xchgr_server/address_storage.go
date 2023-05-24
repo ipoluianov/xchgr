@@ -9,12 +9,20 @@ type AddressStorage struct {
 	mtx         sync.Mutex
 	TouchDT     time.Time
 	maxMessages int
+	billingInfo BillingInfo
 	messages    []*Message
+}
+
+type BillingInfo struct {
+	Counter uint32 `json:"counter"`
+	Limit   uint32 `json:"limit"`
 }
 
 func NewAddressStorage() *AddressStorage {
 	var c AddressStorage
 	c.maxMessages = 1000
+	c.billingInfo.Limit = 10000
+	c.billingInfo.Counter = 0
 	c.messages = make([]*Message, 0, c.maxMessages+1)
 	c.TouchDT = time.Now()
 	return &c
@@ -33,6 +41,14 @@ func (c *AddressStorage) Clear() {
 	c.mtx.Unlock()
 }
 
+func (c *AddressStorage) GetBillingInfo() BillingInfo {
+	var bi BillingInfo
+	c.mtx.Lock()
+	bi = c.billingInfo
+	c.mtx.Unlock()
+	return bi
+}
+
 func (c *AddressStorage) MessagesCount() (count int) {
 	c.mtx.Lock()
 	count = len(c.messages)
@@ -42,6 +58,7 @@ func (c *AddressStorage) MessagesCount() (count int) {
 
 func (c *AddressStorage) Put(id uint64, frame []byte) {
 	c.mtx.Lock()
+	c.billingInfo.Counter++
 	msg := NewMessage(id, frame)
 	c.messages = append(c.messages, msg)
 	if len(c.messages) > c.maxMessages {

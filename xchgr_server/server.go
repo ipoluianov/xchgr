@@ -55,6 +55,7 @@ type RouterStatistics struct {
 	HttpRequestsR  int `json:"http_requests_r"`
 	HttpRequestsW  int `json:"http_requests_w"`
 	HttpRequestsN  int `json:"http_requests_n"`
+	HttpRequestsB  int `json:"http_requests_b"`
 	HttpRequestsNS int `json:"http_requests_ns"`
 	HttpRequestsD  int `json:"http_requests_d"`
 	HttpRequestsS  int `json:"http_requests_s"`
@@ -146,6 +147,18 @@ func (c *Router) Stop() error {
 	c.mtx.Unlock()
 
 	return nil
+}
+
+func (c *Router) GetBillingInfo(addr string) (BillingInfo, error) {
+	if !strings.HasPrefix(addr, "#") {
+		addr = "#" + addr
+	}
+
+	addressStorage, ok := c.addresses[addr]
+	if ok {
+		return addressStorage.GetBillingInfo(), nil
+	}
+	return BillingInfo{}, errors.New("no information")
 }
 
 func (c *Router) thBackgroundOperations() {
@@ -345,6 +358,13 @@ func (c *Router) DeclareHttpRequestW() {
 	c.mtx.Lock()
 	c.stat.HttpRequests++
 	c.stat.HttpRequestsW++
+	c.mtx.Unlock()
+}
+
+func (c *Router) DeclareHttpRequestB() {
+	c.mtx.Lock()
+	c.stat.HttpRequests++
+	c.stat.HttpRequestsB++
 	c.mtx.Unlock()
 }
 

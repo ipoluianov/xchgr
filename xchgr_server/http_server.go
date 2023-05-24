@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -51,6 +52,7 @@ func (c *HttpServer) Start(server *Router, port int) {
 	c.r.HandleFunc("/api/ns", c.processNS)
 	c.r.HandleFunc("/api/debug", c.processDebug)
 	c.r.HandleFunc("/api/stat", c.processStat)
+	c.r.HandleFunc("/api/billing", c.processBilling)
 	c.r.NotFoundHandler = http.HandlerFunc(c.processFile)
 	c.srv = &http.Server{
 		Addr: ":" + fmt.Sprint(port),
@@ -148,6 +150,43 @@ func (c *HttpServer) processR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write([]byte(result))
+}
+
+func (c *HttpServer) processBilling(w http.ResponseWriter, r *http.Request) {
+	c.server.DeclareHttpRequestB()
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Request-Method", "POST")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		return
+	}
+
+	if r.Method == "POST" {
+		if err := r.ParseMultipartForm(1000000); err != nil {
+			fmt.Fprintf(w, "ParseForm() err: %v", err)
+			return
+		}
+	}
+
+	addr := r.FormValue("addr")
+
+	bi, err := c.server.GetBillingInfo(addr)
+	if err != nil {
+		w.WriteHeader(500)
+		b := []byte(err.Error())
+		_, _ = w.Write(b)
+		return
+	}
+
+	bs, err := json.MarshalIndent(bi, "", " ")
+	if err != nil {
+		w.WriteHeader(500)
+		b := []byte(err.Error())
+		_, _ = w.Write(b)
+		return
+	}
+	_, _ = w.Write(bs)
 }
 
 func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
