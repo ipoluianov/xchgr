@@ -158,7 +158,7 @@ func (c *Router) GetBillingInfo(addr string) (BillingInfo, error) {
 	if ok {
 		return addressStorage.GetBillingInfo(), nil
 	}
-	return BillingInfo{}, errors.New("no information")
+	return BillingInfo{}, errors.New("no information for address " + addr)
 }
 
 func (c *Router) thBackgroundOperations() {
