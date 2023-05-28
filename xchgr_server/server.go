@@ -408,6 +408,8 @@ func (c *Router) buildDebugString() {
 	type AddressInfo struct {
 		Address      string `json:"address"`
 		MessageCount int    `json:"messages"`
+		Counter      int    `json:"counter"`
+		Limit        int    `json:"limit"`
 	}
 
 	type DebugInfo struct {
@@ -431,6 +433,8 @@ func (c *Router) buildDebugString() {
 		ai.Address = address
 		ai.MessageCount = a.MessagesCount()
 		di.Addresses = append(di.Addresses, ai)
+		ai.Counter = int(a.billingInfo.Counter)
+		ai.Limit = int(a.billingInfo.Limit)
 	}
 	c.mtx.Unlock()
 
