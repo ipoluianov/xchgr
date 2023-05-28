@@ -432,9 +432,9 @@ func (c *Router) buildDebugString() {
 		var ai AddressInfo
 		ai.Address = address
 		ai.MessageCount = a.MessagesCount()
-		di.Addresses = append(di.Addresses, ai)
 		ai.Counter = int(a.billingInfo.Counter)
-		ai.Limit = 777
+		ai.Limit = int(a.billingInfo.Limit)
+		di.Addresses = append(di.Addresses, ai)
 	}
 	c.mtx.Unlock()
 
