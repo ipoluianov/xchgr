@@ -211,6 +211,9 @@ func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
 	var err error
 	dataBS, err = base64.StdEncoding.DecodeString(data64)
 	if err != nil {
+		w.WriteHeader(500)
+		b := []byte(err.Error())
+		_, _ = w.Write(b)
 		return
 	}
 
@@ -219,8 +222,11 @@ func (c *HttpServer) processW(w http.ResponseWriter, r *http.Request) {
 		if offset+128 <= len(dataBS) {
 			frameLen := int(binary.LittleEndian.Uint32(dataBS[offset:]))
 			if offset+frameLen <= len(dataBS) {
-				c.server.Put(dataBS[offset : offset+frameLen])
+				err = c.server.Put(dataBS[offset : offset+frameLen])
 				if err != nil {
+					w.WriteHeader(500)
+					b := []byte(err.Error())
+					_, _ = w.Write(b)
 					return
 				}
 			} else {

@@ -225,7 +225,7 @@ func (c *Router) thClearAddresses() {
 		c.mtx.Lock()
 		addresses := make([]*AddressStorage, 0)
 		for address, addressStorage := range c.addresses {
-			if now.Sub(addressStorage.TouchDT) > 10*time.Second {
+			if now.Sub(addressStorage.TouchDT) > 30*time.Second {
 				delete(c.addresses, address)
 				continue
 			}
@@ -241,7 +241,7 @@ func (c *Router) thClearAddresses() {
 	}
 }
 
-func (c *Router) Put(frame []byte) {
+func (c *Router) Put(frame []byte) error {
 	var ok bool
 	var addressStorage *AddressStorage
 
@@ -259,9 +259,10 @@ func (c *Router) Put(frame []byte) {
 	c.nextId++
 	c.mtx.Unlock()
 
-	addressStorage.Put(id, frame)
+	err := addressStorage.Put(id, frame)
 	c.stat.FramesIn++
 	c.stat.BytesIn += len(frame)
+	return err
 }
 
 // Get message request
