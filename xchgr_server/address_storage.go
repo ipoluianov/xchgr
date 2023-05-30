@@ -1,7 +1,6 @@
 package xchgr_server
 
 import (
-	"errors"
 	"sync"
 	"time"
 )
@@ -59,10 +58,10 @@ func (c *AddressStorage) MessagesCount() (count int) {
 
 func (c *AddressStorage) Put(id uint64, frame []byte) error {
 	c.mtx.Lock()
-	if c.billingInfo.Counter >= c.billingInfo.Limit {
+	/*if c.billingInfo.Counter >= c.billingInfo.Limit {
 		c.mtx.Unlock()
 		return errors.New("limit exceeded")
-	}
+	}*/
 	c.billingInfo.Counter++
 	msg := NewMessage(id, frame)
 	c.messages = append(c.messages, msg)
