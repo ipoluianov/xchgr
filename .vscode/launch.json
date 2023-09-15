@@ -10,7 +10,6 @@
             "request": "launch",
             "mode": "auto",
             "program": "main.go",
-            "console": "externalTerminal",
             "output": "xchgr.exe"
         }
     ]

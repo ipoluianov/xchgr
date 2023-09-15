@@ -42,6 +42,8 @@ type Router struct {
 	lastDebugInfo []byte
 	lastStatInfo  []byte
 
+	contract01 *Contract01
+
 	clearAddressesLastDT time.Time
 }
 
@@ -97,6 +99,8 @@ func NewRouter() *Router {
 	c.nonces = NewNonces(1000000)
 	c.addresses = make(map[string]*AddressStorage)
 
+	c.contract01 = NewContract01()
+
 	c.statLastDT = time.Now()
 	c.clearAddressesLastDT = time.Now()
 	return &c
@@ -116,6 +120,8 @@ func (c *Router) Start() error {
 
 	go c.thBackgroundOperations()
 
+	c.contract01.Start()
+
 	return nil
 }
 
@@ -129,6 +135,7 @@ func (c *Router) Stop() error {
 		c.mtx.Unlock()
 		return errors.New("already stopping")
 	}
+	c.contract01.Stop()
 	c.stopping = true
 	c.mtx.Unlock()
 
@@ -150,15 +157,22 @@ func (c *Router) Stop() error {
 }
 
 func (c *Router) GetBillingInfo(addr string) (BillingInfo, error) {
+	isPremium := c.contract01.IsPremium(strings.Trim(addr, "#"))
 	if !strings.HasPrefix(addr, "#") {
 		addr = "#" + addr
 	}
 
+	var billingInfo BillingInfo
 	addressStorage, ok := c.addresses[addr]
 	if ok {
-		return addressStorage.GetBillingInfo(), nil
+		billingInfo = addressStorage.GetBillingInfo()
 	}
-	return BillingInfo{}, errors.New("no information for address " + addr)
+
+	billingInfo.Limit = 10000
+	if isPremium {
+		billingInfo.Limit = 1000000000
+	}
+	return billingInfo, nil
 }
 
 func (c *Router) thBackgroundOperations() {
