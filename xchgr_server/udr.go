@@ -86,10 +86,11 @@ func (c *Udr) th() {
 
 	for !c.stopping {
 		buffer := make([]byte, 1024)
-		logger.Println("UDR reading ...")
+		logger.Println("UDR reading ...", addr)
 		bytesRead, remoteAddr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
-			panic(err)
+			logger.Println("ReadFromUDP error:", err)
+			break
 		}
 		incoming := string(buffer[0:bytesRead])
 		c.mtx.Lock()
