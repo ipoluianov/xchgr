@@ -31,6 +31,7 @@ func NewUdr() *Udr {
 }
 
 func (c *Udr) Start() {
+	logger.Println("UDR starting")
 	go c.th()
 }
 
@@ -75,6 +76,7 @@ func (c *Udr) GetIPByXchgAddress(xchgAddress string) string {
 }
 
 func (c *Udr) th() {
+	logger.Println("UDR started")
 	addr, _ := net.ResolveUDPAddr("udp", ":8585")
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
@@ -84,6 +86,7 @@ func (c *Udr) th() {
 
 	for !c.stopping {
 		buffer := make([]byte, 1024)
+		logger.Println("UDR reading ...")
 		bytesRead, remoteAddr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
 			panic(err)
