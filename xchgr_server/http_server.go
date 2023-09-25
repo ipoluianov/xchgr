@@ -50,6 +50,7 @@ func (c *HttpServer) Start(server *Router, port int) {
 	c.r.HandleFunc("/api/w", c.processW)
 	c.r.HandleFunc("/api/r", c.processR)
 	c.r.HandleFunc("/api/ns", c.processNS)
+	c.r.HandleFunc("/api/udp", c.processUDP)
 	c.r.HandleFunc("/api/debug", c.processDebug)
 	c.r.HandleFunc("/api/stat", c.processStat)
 	c.r.HandleFunc("/api/billing", c.processBilling)
@@ -257,6 +258,12 @@ func (c *HttpServer) processNS(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(b)
 		return
 	}
+	_, _ = w.Write([]byte(result))
+}
+
+func (c *HttpServer) processUDP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	result := c.server.udr.State()
 	_, _ = w.Write([]byte(result))
 }
 

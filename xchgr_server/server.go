@@ -31,6 +31,8 @@ type Router struct {
 	network *Network
 	nextId  uint64
 
+	udr *Udr
+
 	addresses map[string]*AddressStorage
 
 	// Statistics
@@ -99,6 +101,8 @@ func NewRouter() *Router {
 	c.nonces = NewNonces(1000000)
 	c.addresses = make(map[string]*AddressStorage)
 
+	c.udr = NewUdr()
+
 	c.contract01 = NewContract01()
 
 	c.statLastDT = time.Now()
@@ -121,6 +125,7 @@ func (c *Router) Start() error {
 	go c.thBackgroundOperations()
 
 	c.contract01.Start()
+	c.udr.Start()
 
 	return nil
 }
@@ -138,6 +143,8 @@ func (c *Router) Stop() error {
 	c.contract01.Stop()
 	c.stopping = true
 	c.mtx.Unlock()
+
+	c.udr.Stop()
 
 	for {
 		c.mtx.Lock()
