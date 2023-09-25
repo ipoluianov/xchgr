@@ -92,6 +92,7 @@ func (c *Udr) th() {
 		c.mtx.Lock()
 		c.db[incoming] = remoteAddr.String()
 		c.mtx.Unlock()
+		logger.Println("RECEIVED UDP", incoming, "from", remoteAddr.String())
 	}
 
 	if conn != nil {
