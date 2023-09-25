@@ -77,7 +77,7 @@ func (c *Udr) GetIPByXchgAddress(xchgAddress string) string {
 
 func (c *Udr) th() {
 	logger.Println("UDR started")
-	addr, _ := net.ResolveUDPAddr("udp", ":8585")
+	addr, _ := net.ResolveUDPAddr("udp", ":8084")
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		logger.Println("ERROR:", err)
