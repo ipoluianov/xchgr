@@ -77,8 +77,12 @@ func (c *Contract01) tick() {
 		dtOperationTime = time.Now().UTC()
 		err = c.shop.Update()
 		if err != nil {
-			logger.Println("Shop Update ERROR:", err)
+			logger.Println("Update contract01 error:", err)
+			c.counterError++
+		} else {
+			c.counterSuccess++
 		}
+
 	}
 }
 
