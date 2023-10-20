@@ -209,6 +209,10 @@ func (c *Router) thBackgroundOperations() {
 func (c *Router) thStatistics() {
 	now := time.Now()
 	if now.Sub(c.statLastDT) >= 1*time.Second {
+		c.stat.Contract01CounterError = c.contract01.CounterError()
+		c.stat.Contract01CounterSuccess = c.contract01.CounterSuccess()
+		c.stat.Contract01CounterRecords = c.contract01.RecordsCount()
+
 		c.mtx.Lock()
 		var stat RouterStatistics
 		stat.BytesIn = c.stat.BytesIn - c.statLast.BytesIn
@@ -225,7 +229,7 @@ func (c *Router) thStatistics() {
 		stat.HttpRequestsF = c.stat.HttpRequestsF - c.statLast.HttpRequestsF
 		stat.Contract01CounterSuccess = c.stat.Contract01CounterSuccess - c.statLast.Contract01CounterSuccess
 		stat.Contract01CounterError = c.stat.Contract01CounterError - c.statLast.Contract01CounterError
-		stat.Contract01CounterRecords = c.stat.Contract01CounterRecords - c.statLast.Contract01CounterRecords
+		stat.Contract01CounterRecords = c.stat.Contract01CounterRecords
 
 		c.statLast = c.stat
 		c.mtx.Unlock()
@@ -249,7 +253,7 @@ func (c *Router) thStatistics() {
 
 		c.statSpeed.Contract01CounterSuccess = int(float64(stat.Contract01CounterSuccess) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.Contract01CounterError = int(float64(stat.Contract01CounterError) / now.Sub(c.statLastDT).Seconds())
-		c.statSpeed.Contract01CounterRecords = int(float64(stat.Contract01CounterRecords) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.Contract01CounterRecords = stat.Contract01CounterRecords
 
 		c.statSpeed.Version = VERSION
 
