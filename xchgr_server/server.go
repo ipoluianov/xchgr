@@ -227,8 +227,8 @@ func (c *Router) thStatistics() {
 		stat.HttpRequestsNS = c.stat.HttpRequestsNS - c.statLast.HttpRequestsNS
 		stat.HttpRequestsD = c.stat.HttpRequestsD - c.statLast.HttpRequestsD
 		stat.HttpRequestsF = c.stat.HttpRequestsF - c.statLast.HttpRequestsF
-		stat.Contract01CounterSuccess = c.stat.Contract01CounterSuccess - c.statLast.Contract01CounterSuccess
-		stat.Contract01CounterError = c.stat.Contract01CounterError - c.statLast.Contract01CounterError
+		stat.Contract01CounterSuccess = c.stat.Contract01CounterSuccess
+		stat.Contract01CounterError = c.stat.Contract01CounterError
 		stat.Contract01CounterRecords = c.stat.Contract01CounterRecords
 
 		c.statLast = c.stat
@@ -251,8 +251,8 @@ func (c *Router) thStatistics() {
 		c.statSpeed.SpeedHttpRequestsD = int(float64(stat.HttpRequestsD) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsF = int(float64(stat.HttpRequestsF) / now.Sub(c.statLastDT).Seconds())
 
-		c.statSpeed.Contract01CounterSuccess = int(float64(stat.Contract01CounterSuccess) / now.Sub(c.statLastDT).Seconds())
-		c.statSpeed.Contract01CounterError = int(float64(stat.Contract01CounterError) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.Contract01CounterSuccess = stat.Contract01CounterSuccess
+		c.statSpeed.Contract01CounterError = stat.Contract01CounterError
 		c.statSpeed.Contract01CounterRecords = stat.Contract01CounterRecords
 
 		c.statSpeed.Version = VERSION
