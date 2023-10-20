@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ipoluianov/gazer-billing-contract-eth/api"
 )
 
 const (
@@ -64,6 +66,10 @@ type RouterStatistics struct {
 	HttpRequestsD  int `json:"http_requests_d"`
 	HttpRequestsS  int `json:"http_requests_s"`
 	HttpRequestsF  int `json:"http_requests_f"`
+
+	Contract01CounterSuccess int `json:"contract01_success"`
+	Contract01CounterError   int `json:"contract01_error"`
+	Contract01CounterRecords int `json:"contract01_records"`
 }
 
 type RouterSpeedStatistics struct {
@@ -85,6 +91,10 @@ type RouterSpeedStatistics struct {
 
 	SpeedBytesMIn  int `json:"megabytes_in"`
 	SpeedBytesMOut int `json:"megabytes_out"`
+
+	Contract01CounterSuccess int `json:"contract01_success"`
+	Contract01CounterError   int `json:"contract01_error"`
+	Contract01CounterRecords int `json:"contract01_records"`
 
 	Version int `json:"version"`
 }
@@ -213,6 +223,9 @@ func (c *Router) thStatistics() {
 		stat.HttpRequestsNS = c.stat.HttpRequestsNS - c.statLast.HttpRequestsNS
 		stat.HttpRequestsD = c.stat.HttpRequestsD - c.statLast.HttpRequestsD
 		stat.HttpRequestsF = c.stat.HttpRequestsF - c.statLast.HttpRequestsF
+		stat.Contract01CounterSuccess = c.stat.Contract01CounterSuccess - c.statLast.Contract01CounterSuccess
+		stat.Contract01CounterError = c.stat.Contract01CounterError - c.statLast.Contract01CounterError
+		stat.Contract01CounterRecords = c.stat.Contract01CounterRecords - c.statLast.Contract01CounterRecords
 
 		c.statLast = c.stat
 		c.mtx.Unlock()
@@ -233,6 +246,11 @@ func (c *Router) thStatistics() {
 		c.statSpeed.SpeedHttpRequestsNS = int(float64(stat.HttpRequestsNS) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsD = int(float64(stat.HttpRequestsD) / now.Sub(c.statLastDT).Seconds())
 		c.statSpeed.SpeedHttpRequestsF = int(float64(stat.HttpRequestsF) / now.Sub(c.statLastDT).Seconds())
+
+		c.statSpeed.Contract01CounterSuccess = int(float64(stat.Contract01CounterSuccess) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.Contract01CounterError = int(float64(stat.Contract01CounterError) / now.Sub(c.statLastDT).Seconds())
+		c.statSpeed.Contract01CounterRecords = int(float64(stat.Contract01CounterRecords) / now.Sub(c.statLastDT).Seconds())
+
 		c.statSpeed.Version = VERSION
 
 		c.statLastDT = now
@@ -434,11 +452,12 @@ func (c *Router) buildDebugString() {
 	}
 
 	type DebugInfo struct {
-		AddressCount int                   `json:"address_count"`
-		NextMsgId    int                   `json:"next_msg_id"`
-		Stat         RouterStatistics      `json:"stat_total"`
-		StatSpeed    RouterSpeedStatistics `json:"stat_in_second"`
-		Addresses    []AddressInfo         `json:"addresses"`
+		AddressCount    int                   `json:"address_count"`
+		NextMsgId       int                   `json:"next_msg_id"`
+		Stat            RouterStatistics      `json:"stat_total"`
+		StatSpeed       RouterSpeedStatistics `json:"stat_in_second"`
+		Addresses       []AddressInfo         `json:"addresses"`
+		Contract01Items []api.ShopRecord      `json:"contract01"`
 	}
 
 	c.mtx.Lock()
@@ -458,6 +477,8 @@ func (c *Router) buildDebugString() {
 		di.Addresses = append(di.Addresses, ai)
 	}
 	c.mtx.Unlock()
+
+	di.Contract01Items = c.contract01.Records()
 
 	sort.Slice(di.Addresses, func(i, j int) bool {
 		return di.Addresses[i].Address < di.Addresses[j].Address

@@ -13,6 +13,9 @@ type Contract01 struct {
 	shop     *api.Shop
 	started  bool
 	stopping bool
+
+	counterSuccess int
+	counterError   int
 }
 
 func NewContract01() *Contract01 {
@@ -49,7 +52,13 @@ func (c *Contract01) tick() {
 	}
 	c.shop = api.NewShop(exePath+"/data/contract01/", string(bsUrl), string(bsContractAddress))
 	c.shop.Load()
-	c.shop.Update()
+	err = c.shop.Update()
+	if err != nil {
+		logger.Println("Update contract01 error:", err)
+		c.counterError++
+	} else {
+		c.counterSuccess++
+	}
 
 	dtOperationTime := time.Now().UTC()
 
@@ -80,4 +89,20 @@ func (c *Contract01) Stop() {
 
 func (c *Contract01) IsPremium(xchgAddress string) bool {
 	return c.shop.IsPremium(xchgAddress)
+}
+
+func (c *Contract01) CounterSuccess() int {
+	return c.counterSuccess
+}
+
+func (c *Contract01) CounterError() int {
+	return c.counterError
+}
+
+func (c *Contract01) RecordsCount() int {
+	return c.shop.RecordsCount()
+}
+
+func (c *Contract01) Records() []api.ShopRecord {
+	return c.shop.Records()
 }

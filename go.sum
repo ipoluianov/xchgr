@@ -53,8 +53,8 @@ github.com/holiman/bloomfilter/v2 v2.0.3 h1:73e0e/V0tCydx14a0SCYS/EWCxgwLZ18CZcZ
 github.com/holiman/uint256 v1.2.3 h1:K8UWO1HUJpRMXBxbmaY1Y8IAMZC/RsKB+ArEnnK4l5o=
 github.com/holiman/uint256 v1.2.3/go.mod h1:SC8Ryt4n+UBbPbIBKaG9zbbDlp4jOru9xFZmPzLUTxw=
 github.com/huin/goupnp v1.0.3 h1:N8No57ls+MnjlB+JPiCVSOyy/ot7MJTqlo7rn+NYSqQ=
-github.com/ipoluianov/gazer-billing-contract-eth v1.0.2 h1:wrb6b6r9vlsL2cozsf5MgCKi5x06CcrcECqzWGEvFUw=
-github.com/ipoluianov/gazer-billing-contract-eth v1.0.2/go.mod h1:YN6urG2oYhY/YaAO2zvsZ7vtm9MIUUAKgdvAqhQ6jPg=
+github.com/ipoluianov/gazer-billing-contract-eth v1.0.4 h1:dbvdPbdifHLVypgYSVL5uYPxGO3dI4wpEN/PcwoML1w=
+github.com/ipoluianov/gazer-billing-contract-eth v1.0.4/go.mod h1:YN6urG2oYhY/YaAO2zvsZ7vtm9MIUUAKgdvAqhQ6jPg=
 github.com/ipoluianov/gomisc v0.0.20 h1:TBD+YsSnDtGKXWk9ZjNOjLcAxXWrr54THwQPtWIN+PE=
 github.com/ipoluianov/gomisc v0.0.20/go.mod h1:3rlYbwz/L3LSguP2M+Png08EAWoXFxPXJ65uLhweiiU=
 github.com/jackpal/go-nat-pmp v1.0.2 h1:KzKSgb7qkJvOUTqYl9/Hg/me3pWgBmERKrTGD7BdWus=
